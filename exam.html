@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en" translate="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="google" content="notranslate">
+  <title>Student Exam - Mr. Top's English Class</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="startScreen" class="center-screen">
+  <section class="card start-card">
+    <div class="brand">MR. TOP'S ENGLISH CLASS</div>
+    <h1 id="startTitle">Vocabulary Examination</h1>
+    <p id="startDescription">Choose an exam and enter your name before starting.</p>
+    <p class="exam-rule-note">The exam opens in fullscreen. Leaving this page or exiting fullscreen submits the exam automatically.</p>
+    <label for="examSelect">Choose Exam</label>
+    <select id="examSelect"><option value="">Loading exams...</option></select>
+    <label for="studentName">Choose Your Name</label>
+    <select id="studentName">
+      <option value="">Loading student database...</option>
+    </select>
+    <div id="studentProfile" class="student-profile hidden">
+      <img id="studentPhoto" class="student-photo" alt="">
+      <div>
+        <strong id="studentProfileName"></strong>
+        <span id="studentProfileProgram"></span>
+        <span class="student-class-level"><span id="studentProfileClass"></span><span class="class-level-separator"> - </span><span id="studentProfileLevel"></span></span>
+      </div>
+    </div>
+    <label for="studentPhotoUpload" id="studentPhotoLabel">Upload Your Photo</label>
+    <input id="studentPhotoUpload" type="file" accept="image/*" capture="user">
+    <p id="studentPhotoHint" class="small-note">A photo is required the first time. You can replace it later.</p>
+    <div id="studentProgress" class="student-progress"></div>
+    <div id="studentHistory" class="student-history"></div>
+    <button id="startExamBtn" class="btn primary full">Start Exam</button>
+    <a href="index.html" class="back-link">← Back to Home</a>
+  </section>
+</div>
+
+<div id="examScreen" class="exam-app hidden">
+  <header class="exam-header">
+    <div class="exam-title">MR. TOP'S ENGLISH CLASS</div>
+    <div class="student-identity">
+      <div class="header-side-block">
+        <img id="examStudentPhoto" class="exam-student-photo hidden" alt="Student photo">
+      </div>
+      <div id="studentDisplay" class="student-display">
+        <strong id="examStudentName"></strong>
+        <span id="examStudentProgram"></span>
+        <span class="student-class-level"><span id="examStudentClass"></span><span class="class-level-separator"> - </span><span id="examStudentLevel"></span></span>
+      </div>
+      <div class="header-side-block header-grade-block">
+        <strong id="examGrade" class="exam-grade">-</strong>
+      </div>
+    </div>
+    <div class="exam-info-box">
+      <div class="exam-info-details">
+        <strong id="examTitleHeader"></strong>
+        <span id="examDate"></span>
+      </div>
+      <div class="timer-box">
+        <strong id="timer">00:00:00</strong>
+      </div>
+    </div>
+  </header>
+
+  <div class="exam-layout">
+    <main class="question-area">
+      <div class="question-meta">
+        <span id="questionNumber">ALL QUESTIONS</span>
+        <span id="questionType" class="badge"></span>
+      </div>
+
+      <div id="questionsList"></div>
+
+      <aside class="question-sidebar">
+        <div class="sidebar-title">
+          <strong>Question Progress</strong>
+          <span id="progressText">0 / 0 answered</span>
+        </div>
+        <div id="questionNav" class="question-nav"></div>
+        <div class="legend">
+          <span><i class="dot answered"></i> Answered</span>
+          <span><i class="dot empty"></i> Unanswered</span>
+        </div>
+      </aside>
+
+      <div class="submit-area">
+        <button id="submitExamBtn" class="btn danger">Submit Exam</button>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div id="noExamScreen" class="center-screen hidden">
+  <section class="card start-card">
+    <h1>No Exam Available</h1>
+    <p>The administrator has not created an exam in this browser yet.</p>
+    <a class="btn primary" href="admin.html">Go to Admin Panel</a>
+  </section>
+</div>
+
+<div id="confirmModal" class="modal hidden">
+  <div class="modal-content card">
+    <h2>Submit Exam?</h2>
+    <p id="confirmText">Are you sure you want to submit your exam?</p>
+    <div class="button-row">
+      <button id="cancelSubmitBtn" class="btn secondary">Cancel</button>
+      <button id="confirmSubmitBtn" class="btn danger">Yes, Submit</button>
+    </div>
+  </div>
+</div>
+
+<div id="leaveWarningModal" class="modal hidden">
+  <div class="modal-content card leave-warning">
+    <h2>Leave Exam?</h2>
+    <p id="leaveWarningText">Are you sure you want to leave? The exam will be submitted automatically.</p>
+    <strong class="leave-countdown"><span id="leaveCountdown">10</span></strong>
+    <div class="button-row centered">
+      <button id="stayOnExamBtn" class="btn secondary">Stay on Exam</button>
+      <button id="leaveSubmitBtn" class="btn danger">Submit and Leave</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

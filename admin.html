@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en" translate="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="google" content="notranslate">
+  <title>Admin Panel - Mr. Top's English Class</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <a href="index.html" class="logo">MR. TOP'S ENGLISH CLASS</a>
+  <a href="exam.html" class="btn secondary small">Student View</a>
+</header>
+
+<main class="container">
+  <section class="page-heading">
+    <h1>Admin Panel</h1>
+    <p>Upload an Excel file with <strong>WEEK, DAY, TYPE, NO, QUESTION, ENGLISH</strong>. For dropdown questions, add <strong>OPTION_A</strong> through <strong>OPTION_J</strong> and <strong>CORRECT_OPTION</strong>.</p>
+  </section>
+
+  <section class="card admin-grid">
+    <div>
+      <label for="examTitle">Exam Title</label>
+      <input id="examTitle" type="text" value="Mr. Top's English Class - Vocabulary Examination">
+
+      <label for="duration">Exam Duration (minutes)</label>
+      <input id="duration" type="number" min="1" value="60">
+
+      <label for="examType">Exam Type</label>
+      <select id="examType">
+        <option value="VOCABULARY">Vocabulary</option>
+        <option value="EXPRESSIONS_PROVERBS_IDIOMS">Expressions, Proverbs, and Idioms</option>
+      </select>
+
+      <label for="questionOrder">Question Order</label>
+      <select id="questionOrder">
+        <option value="ordered">Show questions in order</option>
+        <option value="random">Randomize questions</option>
+      </select>
+
+      <label for="examProgram">Program</label>
+      <select id="examProgram"><option value="">All programs</option></select>
+      <div class="inline-input">
+        <input id="newProgram" type="text" placeholder="Add a new program">
+        <button id="addProgramBtn" class="btn secondary small" type="button">Add</button>
+      </div>
+
+      <label for="examClass">Class</label>
+      <select id="examClass"><option value="">All classes</option></select>
+      <div class="inline-input">
+        <input id="newClass" type="text" placeholder="Add a new class">
+        <button id="addClassBtn" class="btn secondary small" type="button">Add</button>
+      </div>
+
+      <label for="examLevel">Level</label>
+      <select id="examLevel"><option value="">All levels</option></select>
+      <div class="inline-input">
+        <input id="newLevel" type="text" placeholder="Add a new level">
+        <button id="addLevelBtn" class="btn secondary small" type="button">Add</button>
+      </div>
+
+      <label for="prerequisiteExam">Prerequisite Exam</label>
+      <select id="prerequisiteExam"><option value="">No prerequisite</option></select>
+
+      <label for="minimumScore">Minimum Clearance Score (%)</label>
+      <input id="minimumScore" type="number" min="0" max="100" value="60">
+
+      <label for="excelFile">Upload Excel File (.xlsx / .xls)</label>
+      <input id="excelFile" type="file" accept=".xlsx,.xls">
+      <p class="small-note">QUESTION or INDONESIA is the prompt. Use options for Expressions, Proverbs, and Idioms dropdown questions.</p>
+
+      <div class="button-row">
+        <button id="loadDemoBtn" class="btn secondary">Load Demo Data</button>
+        <button id="createExamBtn" class="btn primary">Create Exam</button>
+      </div>
+    </div>
+
+    <div class="preview-box">
+      <h2>Question Preview</h2>
+      <div id="fileStatus">No Excel file loaded.</div>
+      <div id="questionCount" class="big-number">0</div>
+      <div id="previewTable"></div>
+    </div>
+  </section>
+
+  <section class="card admin-grid">
+    <div>
+      <h2>Student Database</h2>
+      <p>Upload a spreadsheet with <strong>PROGRAM, CLASS, LEVEL, NAME</strong>, and optional <strong>PHOTO</strong> columns.</p>
+      <label for="studentFile">Upload Student Database (.xlsx / .xls)</label>
+      <input id="studentFile" type="file" accept=".xlsx,.xls">
+      <p class="small-note">PHOTO accepts an image URL or a data URL. Students will select their names from a dropdown.</p>
+
+      <div class="button-row">
+        <button id="loadDemoStudentsBtn" class="btn secondary">Load Demo Students</button>
+        <button id="clearStudentsBtn" class="btn danger">Clear Students</button>
+      </div>
+    </div>
+
+    <div class="preview-box">
+      <h2>Student Preview</h2>
+      <div id="studentFileStatus">No student database loaded.</div>
+      <div id="studentCount" class="big-number">0</div>
+      <div id="studentPreviewTable"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Manage Programs, Classes, and Levels</h2>
+    <p class="small-note">Stored options are listed alphabetically. Removing an option does not delete existing exams.</p>
+    <div class="managed-lists">
+      <div>
+        <h3>Programs</h3>
+        <div id="programManagementList" class="management-list"></div>
+      </div>
+      <div>
+        <h3>Classes</h3>
+        <div id="classManagementList" class="management-list"></div>
+      </div>
+      <div>
+        <h3>Levels</h3>
+        <div id="levelManagementList" class="management-list"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Exam Library</h2>
+    <div class="management-filters">
+      <label for="examManagementProgram">Program</label>
+      <select id="examManagementProgram"><option value="">All programs</option></select>
+      <label for="examManagementClass">Class</label>
+      <select id="examManagementClass"><option value="">All classes</option></select>
+      <label for="examManagementLevel">Level</label>
+      <select id="examManagementLevel"><option value="">All levels</option></select>
+    </div>
+    <div id="currentExamInfo">No exams have been created yet.</div>
+    <div class="button-row">
+      <a class="btn primary" href="exam.html">Open Student Exam</a>
+      <button id="clearExamBtn" class="btn danger">Delete All Exams</button>
+      <button id="exportResultsBtn" class="btn secondary">Export Results (.xlsx)</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Manage Students</h2>
+    <p class="small-note">Students are sorted alphabetically by name. Remove or edit the roster spreadsheet to make larger changes.</p>
+    <div class="management-filters">
+      <label for="studentManagementProgram">Program</label>
+      <select id="studentManagementProgram"><option value="">All programs</option></select>
+      <label for="studentManagementClass">Class</label>
+      <select id="studentManagementClass"><option value="">All classes</option></select>
+      <label for="studentManagementLevel">Level</label>
+      <select id="studentManagementLevel"><option value="">All levels</option></select>
+    </div>
+    <div id="studentManagementList" class="student-management-list"></div>
+  </section>
+
+  <section class="card">
+    <h2>Student Results and Progress</h2>
+    <div id="studentResultsTable"><p class="small-note">No student results yet.</p></div>
+  </section>
+
+  <section class="card">
+    <h2>Edit Existing Exam</h2>
+    <p class="small-note">Load an exam to change its questions, answers, options, program, level, or prerequisite without uploading a new file.</p>
+    <label for="editExamSelect">Exam to Edit</label>
+    <select id="editExamSelect"><option value="">Select an exam</option></select>
+    <button id="loadExamEditorBtn" class="btn secondary">Load Exam Data</button>
+    <div id="examEditor" class="exam-editor"></div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
