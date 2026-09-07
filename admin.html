@@ -8,18 +8,41 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div id="adminAuthScreen" class="center-screen">
+  <section class="card start-card auth-card">
+    <div class="brand">MR. TOP'S ENGLISH CLASS</div>
+    <h1>Tutor Login</h1>
+    <p>Enter the tutor password to open the Admin Panel.</p>
+    <form id="adminLoginForm">
+      <label for="adminPassword">Tutor Password</label>
+      <input id="adminPassword" type="password" autocomplete="current-password" required>
+      <p id="adminLoginError" class="form-error hidden">Incorrect password.</p>
+      <button class="btn primary full" type="submit">Open Admin Panel</button>
+    </form>
+    <a href="exam.html" class="back-link">Continue as Student</a>
+  </section>
+</div>
+
+<div id="adminContent" class="hidden" data-exam-panel>
 <header class="topbar">
   <a href="index.html" class="logo">MR. TOP'S ENGLISH CLASS</a>
-  <a href="exam.html" class="btn secondary small">Student View</a>
+  <div class="button-row">
+    <nav class="admin-tabs" aria-label="Admin sections">
+      <a href="management.html" class="admin-tab">Classes &amp; Students</a>
+      <a href="admin.html" class="admin-tab active">Exams</a>
+    </nav>
+    <button id="adminLogoutBtn" class="btn secondary small" type="button">Log Out</button>
+  </div>
 </header>
 
 <main class="container">
   <section class="page-heading">
     <h1>Admin Panel</h1>
+    <p class="admin-nav-note">Exam workspace: add, edit, view, and delete exams only.</p>
     <p>Upload an Excel file with <strong>WEEK, DAY, TYPE, NO, QUESTION, ENGLISH</strong>. For dropdown questions, add <strong>OPTION_A</strong> through <strong>OPTION_J</strong> and <strong>CORRECT_OPTION</strong>.</p>
   </section>
 
-  <section class="card admin-grid">
+  <section id="examCreationSection" class="card admin-grid">
     <div>
       <label for="examTitle">Exam Title</label>
       <input id="examTitle" type="text" value="Mr. Top's English Class - Vocabulary Examination">
@@ -70,10 +93,7 @@
       <input id="excelFile" type="file" accept=".xlsx,.xls">
       <p class="small-note">QUESTION or INDONESIA is the prompt. Use options for Expressions, Proverbs, and Idioms dropdown questions.</p>
 
-      <div class="button-row">
-        <button id="loadDemoBtn" class="btn secondary">Load Demo Data</button>
-        <button id="createExamBtn" class="btn primary">Create Exam</button>
-      </div>
+      <div class="button-row"><button id="createExamBtn" class="btn primary">Create Exam</button></div>
     </div>
 
     <div class="preview-box">
@@ -84,7 +104,7 @@
     </div>
   </section>
 
-  <section class="card admin-grid">
+  <section id="studentDatabaseSection" class="card admin-grid">
     <div>
       <h2>Student Database</h2>
       <p>Upload a spreadsheet with <strong>PROGRAM, CLASS, LEVEL, NAME</strong>, and optional <strong>PHOTO</strong> columns.</p>
@@ -106,7 +126,7 @@
     </div>
   </section>
 
-  <section class="card">
+  <section id="classOptionsSection" class="card">
     <h2>Manage Programs, Classes, and Levels</h2>
     <p class="small-note">Stored options are listed alphabetically. Removing an option does not delete existing exams.</p>
     <div class="managed-lists">
@@ -125,7 +145,7 @@
     </div>
   </section>
 
-  <section class="card">
+  <section id="examLibrarySection" class="card">
     <h2>Exam Library</h2>
     <div class="management-filters">
       <label for="examManagementProgram">Program</label>
@@ -138,12 +158,12 @@
     <div id="currentExamInfo">No exams have been created yet.</div>
     <div class="button-row">
       <a class="btn primary" href="exam.html">Open Student Exam</a>
-      <button id="clearExamBtn" class="btn danger">Delete All Exams</button>
       <button id="exportResultsBtn" class="btn secondary">Export Results (.xlsx)</button>
+      <button id="editExamsBtn" class="btn secondary small" type="button">Edit Exam Data</button>
     </div>
   </section>
 
-  <section class="card">
+  <section id="studentManagementSection" class="card">
     <h2>Manage Students</h2>
     <p class="small-note">Students are sorted alphabetically by name. Remove or edit the roster spreadsheet to make larger changes.</p>
     <div class="management-filters">
@@ -157,12 +177,12 @@
     <div id="studentManagementList" class="student-management-list"></div>
   </section>
 
-  <section class="card">
+  <section id="studentResultsSection" class="card">
     <h2>Student Results and Progress</h2>
     <div id="studentResultsTable"><p class="small-note">No student results yet.</p></div>
   </section>
 
-  <section class="card">
+  <section id="examEditorSection" class="card">
     <h2>Edit Existing Exam</h2>
     <p class="small-note">Load an exam to change its questions, answers, options, program, level, or prerequisite without uploading a new file.</p>
     <label for="editExamSelect">Exam to Edit</label>
@@ -170,9 +190,16 @@
     <button id="loadExamEditorBtn" class="btn secondary">Load Exam Data</button>
     <div id="examEditor" class="exam-editor"></div>
   </section>
+  <section class="card destructive-actions">
+    <h2>Danger Zone</h2>
+    <button id="loadDemoBtn" class="btn secondary">Load Demo Data</button>
+    <button id="clearExamBtn" class="btn danger hidden edit-only-control">Delete All Exams</button>
+  </section>
 </main>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="cloud-storage.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -45,14 +45,27 @@ Admin Panel reads those values automatically and fills the exam settings.
 HOW TO RUN:
 1. Keep all files in the same folder.
 2. Open index.html in Google Chrome.
-3. Click Admin Panel.
-4. Upload your Excel file.
-5. Set the exam duration.
-6. Click Create Exam.
-7. Open Student Exam.
+3. Click Enter Student Exam to open the student exam.
+4. Tutors can use the Admin Panel button at the top left and enter the tutor password.
+5. Open Students & Classes from the Admin Panel to manage the roster and class options.
+6. Upload your Excel file.
+7. Set the exam duration.
+8. Click Create Exam.
+
+ROLE ACCESS:
+The home page opens in Student mode by default. Choose Tutor (Admin) to enter the
+tutor password. The default tutor password for this local Version 1 app is:
+tutortampan
+Tutor access remains active for the current browser tab until Log Out is selected.
+This is a local browser access gate; a production online system should use server-side
+authentication.
+
+The admin navigation is split into compact Student Management, Class Management, and
+Exam Management pages. These pages redirect to the tutor login when opened without
+tutor authentication.
 
 IMPORTANT:
-Version 1 uses Browser Local Storage.
-The admin and student must use the SAME browser/device to access the same exam.
-
-For a real online system where students use different phones and the admin receives all results, Version 2 should use Firebase/database.
+The app now synchronizes its browser data with Supabase when the database table is configured.
+To enable it, open the Supabase SQL Editor and run every statement in supabase-setup.sql,
+then deploy all project files to Netlify. Local Storage remains available as an offline fallback.
+Never add a Supabase service-role key to this browser app.

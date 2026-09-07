@@ -8,9 +8,237 @@ const STORAGE_STUDENT_PHOTOS = "cec_student_photos_v1";
 const STORAGE_PROGRAMS = "cec_programs_v1";
 const STORAGE_LEVELS = "cec_levels_v1";
 const STORAGE_CLASSES = "cec_classes_v1";
+const STORAGE_TUTOR_SESSION = "cec_tutor_session_v1";
+const TUTOR_PASSWORD = "tutortampan";
 let loadedQuestions = [];
 let loadedStudents = [];
 let loadedExamMetadata = {};
+
+function isTutorAuthenticated() {
+  return sessionStorage.getItem(STORAGE_TUTOR_SESSION) === "authenticated";
+}
+
+function displayName(value) {
+  return String(value ?? "").trim().toLowerCase().replace(/\b[a-z]/g, letter => letter.toUpperCase());
+}
+
+function authenticateTutor(password) {
+  if (password !== TUTOR_PASSWORD) return false;
+  sessionStorage.setItem(STORAGE_TUTOR_SESSION, "authenticated");
+  return true;
+}
+
+function initProtectedShortcutPage() {
+  if (!document.body.hasAttribute("data-admin-shortcut")) return;
+  if (!isTutorAuthenticated()) window.location.href = "admin.html";
+  document.querySelectorAll("[data-admin-logout]").forEach(button => {
+    button.addEventListener("click", () => {
+      sessionStorage.removeItem(STORAGE_TUTOR_SESSION);
+      window.location.href = "index.html";
+    });
+  });
+}
+
+function initManagement() {
+  const fileInput = document.getElementById("managementStudentFile");
+  if (!fileInput) return;
+  const authScreen = document.getElementById("managementAuthScreen");
+  const content = document.getElementById("managementContent");
+
+  function openManagement() {
+    authScreen.classList.add("hidden");
+    content.classList.remove("hidden");
+    renderManagement();
+  }
+
+  const alreadyAuthenticated = isTutorAuthenticated();
+  if (!alreadyAuthenticated) {
+    document.getElementById("managementLoginForm").addEventListener("submit", event => {
+      event.preventDefault();
+      const password = document.getElementById("managementPassword");
+      const error = document.getElementById("managementLoginError");
+      if (!authenticateTutor(password.value)) {
+        error.classList.remove("hidden");
+        password.select();
+        return;
+      }
+      openManagement();
+    });
+    return;
+  }
+  openManagement();
+
+  function renderManagement() {
+    let students = [];
+    try {
+      students = JSON.parse(localStorage.getItem(STORAGE_STUDENTS) || "[]");
+    } catch (error) {
+      students = [];
+    }
+
+    const optionLists = [
+      ["managementProgramList", STORAGE_PROGRAMS, "program"],
+      ["managementClassList", STORAGE_CLASSES, "class"],
+      ["managementLevelList", STORAGE_LEVELS, "level"]
+    ];
+    optionLists.forEach(([elementId, key]) => {
+      const element = document.getElementById(elementId);
+      const values = getOptions(key, []).sort((a, b) => String(a).localeCompare(String(b)));
+      element.innerHTML = values.length
+        ? values.map(value => `<div class="management-item"><span>${escapeHtml(value)}</span><button class="btn danger small management-delete-option hidden" data-key="${key}" data-value="${escapeHtml(value)}" type="button">Delete</button></div>`).join("")
+        : "<p class=\"small-note\">No stored options.</p>";
+    });
+
+    const filterIds = [
+      ["managementFilterProgram", STORAGE_PROGRAMS, "All programs"],
+      ["managementFilterClass", STORAGE_CLASSES, "All classes"],
+      ["managementFilterLevel", STORAGE_LEVELS, "All levels"]
+    ];
+    filterIds.forEach(([id, key, label]) => {
+      const select = document.getElementById(id);
+      const current = select.value;
+      const values = getOptions(key, []).sort((a, b) => String(a).localeCompare(String(b)));
+      select.innerHTML = `<option value="">${label}</option>${values.map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join("")}`;
+      select.value = values.includes(current) ? current : "";
+    });
+
+    const program = document.getElementById("managementFilterProgram").value;
+    const className = document.getElementById("managementFilterClass").value;
+    const level = document.getElementById("managementFilterLevel").value;
+    const filtered = [...students].reverse().filter(student =>
+      (!program || student.program === program) &&
+      (!className || student.className === className) &&
+      (!level || student.level === level)
+    );
+    const list = document.getElementById("managementStudentList");
+    list.innerHTML = filtered.length
+      ? filtered.map(student => `<div class="student-management-item"><span><strong>${escapeHtml(displayName(student.name))}</strong><small>${escapeHtml(student.program || "-")} · ${escapeHtml(student.className || "-")} · ${escapeHtml(student.level || "-")}</small></span><button class="btn danger small management-delete-student edit-only-control hidden" data-name="${escapeHtml(student.name)}" type="button">Delete</button></div>`).join("")
+      : "<p class=\"small-note\">No stored students.</p>";
+
+    document.querySelectorAll(".management-delete-option").forEach(button => {
+      button.onclick = () => {
+        if (!confirmThreeTimes(`Delete ${button.dataset.value}?`)) return;
+        const remaining = getOptions(button.dataset.key, []).filter(value => value !== button.dataset.value);
+        localStorage.setItem(button.dataset.key, JSON.stringify(remaining));
+        renderManagement();
+      };
+    });
+    document.querySelectorAll(".management-delete-student").forEach(button => {
+      button.onclick = () => {
+        if (!confirmThreeTimes(`Delete student ${button.dataset.name} and their saved photo?`)) return;
+        const remaining = students.filter(student => student.name !== button.dataset.name);
+        localStorage.setItem(STORAGE_STUDENTS, JSON.stringify(remaining));
+        renderManagement();
+      };
+    });
+    document.getElementById("editStudentsBtn").onclick = () => {
+      document.querySelectorAll(".management-delete-student").forEach(button => button.classList.toggle("hidden"));
+      document.getElementById("managementClearStudentsBtn").classList.toggle("hidden");
+    };
+    document.getElementById("editClassesBtn").onclick = () => {
+      document.querySelectorAll(".management-delete-option").forEach(button => button.classList.toggle("hidden"));
+    };
+  }
+
+  function addOption(key, inputId) {
+    const input = document.getElementById(inputId);
+    const value = input.value.trim();
+    if (!value) return;
+    saveOption(key, value);
+    input.value = "";
+    renderManagement();
+  }
+
+  document.getElementById("managementAddProgram").onclick = () => addOption(STORAGE_PROGRAMS, "managementNewProgram");
+  document.getElementById("managementAddClass").onclick = () => addOption(STORAGE_CLASSES, "managementNewClass");
+  document.getElementById("managementAddLevel").onclick = () => addOption(STORAGE_LEVELS, "managementNewLevel");
+  ["managementFilterProgram", "managementFilterClass", "managementFilterLevel"].forEach(id => {
+    document.getElementById(id).onchange = renderManagement;
+  });
+  document.getElementById("managementLogoutBtn").onclick = () => {
+    sessionStorage.removeItem(STORAGE_TUTOR_SESSION);
+    window.location.href = "index.html";
+  };
+  document.getElementById("managementDemoStudentsBtn").onclick = () => {
+    localStorage.setItem(STORAGE_STUDENTS, JSON.stringify(demoStudents()));
+    demoStudents().forEach(student => {
+      if (student.program) saveOption(STORAGE_PROGRAMS, student.program);
+      if (student.className) saveOption(STORAGE_CLASSES, student.className);
+      if (student.level) saveOption(STORAGE_LEVELS, student.level);
+    });
+    renderManagement();
+  };
+  document.getElementById("managementClearStudentsBtn").onclick = () => {
+    if (!confirmThreeTimes("Clear all students?")) return;
+    localStorage.removeItem(STORAGE_STUDENTS);
+    localStorage.removeItem(STORAGE_STUDENT_PHOTOS);
+    renderManagement();
+  };
+  fileInput.onchange = async event => {
+    const file = event.target.files[0];
+    if (!file) return;
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), {type: "array"});
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {defval: ""});
+      const imported = rows.map(row => {
+        const normalized = normalizedSpreadsheetRow(row);
+        return {
+          name: normalized.NAME || normalized.STUDENT_NAME || normalized.STUDENT,
+          className: normalized.CLASS || normalized.CLASS_NAME,
+          program: normalized.PROGRAM,
+          level: normalized.LEVEL || normalized.PROFICIENCY_LEVEL,
+          photo: safePhotoUrl(normalized.PHOTO || normalized.PHOTO_URL)
+        };
+      }).filter(student => student.name);
+      if (!imported.length) throw new Error("No student names found.");
+      localStorage.setItem(STORAGE_STUDENTS, JSON.stringify(imported));
+      imported.forEach(student => {
+        if (student.program) saveOption(STORAGE_PROGRAMS, String(student.program).trim());
+        if (student.className) saveOption(STORAGE_CLASSES, String(student.className).trim());
+        if (student.level) saveOption(STORAGE_LEVELS, String(student.level).trim());
+      });
+      document.getElementById("managementStudentStatus").textContent = `Loaded: ${file.name}`;
+      renderManagement();
+    } catch (error) {
+      document.getElementById("managementStudentStatus").textContent = "Error: Please check the student database format.";
+      alert("The student database could not be read. Make sure it contains a NAME column.");
+    }
+  };
+  if (alreadyAuthenticated) openManagement();
+}
+
+function initLanding() {
+  const roleSelect = document.getElementById("userRole");
+  const continueButton = document.getElementById("continueRoleBtn");
+  if (!roleSelect || !continueButton) return;
+  const passwordBox = document.getElementById("tutorPasswordBox");
+  const passwordInput = document.getElementById("tutorPassword");
+  const error = document.getElementById("roleError");
+
+  function updateRole() {
+    const tutorSelected = roleSelect.value === "tutor";
+    passwordBox.classList.toggle("hidden", !tutorSelected);
+    passwordInput.required = tutorSelected;
+    continueButton.textContent = tutorSelected ? "Open Tutor Panel" : "Continue as Student";
+    error.classList.add("hidden");
+  }
+
+  roleSelect.addEventListener("change", updateRole);
+  continueButton.addEventListener("click", () => {
+    if (roleSelect.value === "student") {
+      window.location.href = "exam.html";
+      return;
+    }
+    if (!authenticateTutor(passwordInput.value)) {
+      error.textContent = "Incorrect tutor password.";
+      error.classList.remove("hidden");
+      passwordInput.select();
+      return;
+    }
+    window.location.href = "admin.html";
+  });
+  updateRole();
+}
 
 function normalize(text) {
   return String(text ?? "")
@@ -189,6 +417,28 @@ function demoQuestions() {
 function initAdmin() {
   const fileInput = document.getElementById("excelFile");
   if (!fileInput) return;
+  const authScreen = document.getElementById("adminAuthScreen");
+  const adminContent = document.getElementById("adminContent");
+  if (!isTutorAuthenticated()) {
+    authScreen.classList.remove("hidden");
+    adminContent.classList.add("hidden");
+    document.getElementById("adminLoginForm").addEventListener("submit", event => {
+      event.preventDefault();
+      const password = document.getElementById("adminPassword");
+      const error = document.getElementById("adminLoginError");
+      if (!authenticateTutor(password.value)) {
+        error.classList.remove("hidden");
+        password.select();
+        return;
+      }
+      authScreen.classList.add("hidden");
+      adminContent.classList.remove("hidden");
+      initAdmin();
+    });
+    return;
+  }
+  authScreen.classList.add("hidden");
+  adminContent.classList.remove("hidden");
 
   const status = document.getElementById("fileStatus");
   const count = document.getElementById("questionCount");
@@ -197,6 +447,10 @@ function initAdmin() {
   const studentStatus = document.getElementById("studentFileStatus");
   const studentCount = document.getElementById("studentCount");
   const studentPreview = document.getElementById("studentPreviewTable");
+  document.getElementById("adminLogoutBtn").addEventListener("click", () => {
+    sessionStorage.removeItem(STORAGE_TUTOR_SESSION);
+    window.location.href = "index.html";
+  });
 
   function refreshManagedOptions() {
     const programs = getOptions(STORAGE_PROGRAMS, []).sort((first, second) => String(first).localeCompare(String(second)));
@@ -237,7 +491,7 @@ function initAdmin() {
       const element = document.getElementById(elementId);
       const values = getOptions(storageKey, []).sort((first, second) => String(first).localeCompare(String(second)));
       element.innerHTML = values.length
-        ? values.map(value => `<div class="management-item"><span>${escapeHtml(value)}</span><button class="btn danger small delete-option-btn" data-storage-key="${storageKey}" data-option-value="${escapeHtml(value)}" type="button">Delete</button></div>`).join("")
+        ? values.map(value => `<div class="management-item"><span>${escapeHtml(value)}</span><button class="btn danger small delete-option-btn hidden" data-storage-key="${storageKey}" data-option-value="${escapeHtml(value)}" type="button">Delete</button></div>`).join("")
         : "<p class=\"small-note\">No stored options.</p>";
     });
 
@@ -264,7 +518,7 @@ function initAdmin() {
       (!levelFilter || student.level === levelFilter)
     ).sort((first, second) => String(first.name).localeCompare(String(second.name)));
     element.innerHTML = students.length
-      ? students.map(student => `<div class="student-management-item"><span><strong>${escapeHtml(student.name)}</strong><small>${escapeHtml(student.program || "-")} · ${escapeHtml(student.className || "-")} · ${escapeHtml(student.level || "-")}</small></span><button class="btn danger small delete-student-btn" data-student-name="${escapeHtml(student.name)}" type="button">Delete</button></div>`).join("")
+      ? students.map(student => `<div class="student-management-item"><span><strong>${escapeHtml(displayName(student.name))}</strong><small>${escapeHtml(student.program || "-")} · ${escapeHtml(student.className || "-")} · ${escapeHtml(student.level || "-")}</small></span><button class="btn danger small delete-student-btn" data-student-name="${escapeHtml(student.name)}" type="button">Delete</button></div>`).join("")
       : "<p class=\"small-note\">No stored students.</p>";
 
     element.querySelectorAll(".delete-student-btn").forEach(button => {
@@ -334,9 +588,9 @@ function initAdmin() {
       studentPreview.innerHTML = "";
       return;
     }
-    const rows = loadedStudents.slice(0, 8).map(student => `
+    const rows = [...loadedStudents].reverse().slice(0, 8).map(student => `
       <tr><td>${escapeHtml(student.program)}</td><td>${escapeHtml(student.className)}</td>
-      <td>${escapeHtml(student.level)}</td><td>${escapeHtml(student.name)}</td>
+      <td>${escapeHtml(student.level)}</td><td>${escapeHtml(displayName(student.name))}</td>
       <td>${student.photo ? `<img class="roster-photo" src="${escapeHtml(student.photo)}" alt="">` : "-"}</td></tr>`).join("");
     studentPreview.innerHTML = `<table class="preview-table roster-table">
       <thead><tr><th>Program</th><th>Class</th><th>Level</th><th>Name</th><th>Photo</th></tr></thead>
@@ -565,7 +819,7 @@ function initAdmin() {
       return `<article class="exam-library-item"><strong>${escapeHtml(exam.title)}</strong>
         <span>${escapeHtml(exam.program || "All programs")} · ${escapeHtml(exam.level || "All levels")} · ${escapeHtml(exam.className || "All classes")} · ${escapeHtml(examTypeLabel(exam.examType))} · ${exam.questions.length} questions · ${exam.duration} minutes</span>
         <span>${prerequisite ? `Requires ${escapeHtml(prerequisite.title)} at ${exam.minimumScore}%` : "No prerequisite"}</span>
-        <button class="btn danger small delete-exam-btn" data-exam-id="${escapeHtml(exam.id)}" type="button">Delete This Exam</button></article>`;
+        <button class="btn danger small delete-exam-btn edit-only-control hidden" data-exam-id="${escapeHtml(exam.id)}" type="button">Delete This Exam</button></article>`;
     }).join("")}</div>
     <p class="small-note">${loadedStudents.length} registered students</p>`;
 
@@ -590,7 +844,11 @@ function initAdmin() {
         showCurrentExam();
         renderStudentResults();
       });
-    });
+      });
+      document.getElementById("editExamsBtn").onclick = () => {
+        box.querySelectorAll(".delete-exam-btn").forEach(button => button.classList.toggle("hidden"));
+        document.getElementById("clearExamBtn").classList.toggle("hidden");
+      };
   }
 
   function renderStudentResults() {
@@ -603,7 +861,7 @@ function initAdmin() {
     box.innerHTML = `<div class="results-table-wrap"><table class="preview-table results-table">
       <thead><tr><th>Student</th><th>Program</th><th>Class</th><th>Level</th><th>Exam</th><th>Correct / Total</th><th>Points</th><th>Score</th><th>Grade</th></tr></thead>
       <tbody>${results.map(result => `<tr>
-        <td>${escapeHtml(result.studentName)}</td><td>${escapeHtml(result.studentProgram || "-")}</td>
+        <td>${escapeHtml(displayName(result.studentName))}</td><td>${escapeHtml(result.studentProgram || "-")}</td>
         <td>${escapeHtml(result.studentClass || "-")}</td><td>${escapeHtml(result.studentLevel || "-")}</td>
         <td>${escapeHtml(result.examTitle)}</td><td>${result.correct} / ${result.total}</td>
         <td>${result.points ?? result.correct} / ${result.total}</td><td>${result.score}%</td>
@@ -781,7 +1039,7 @@ function initExam() {
 
   studentSelect.innerHTML = students.length
     ? `<option value="">Select your name</option>${students.map((student, index) =>
-      `<option value="${index}">${escapeHtml(student.name)}</option>`).join("")}`
+      `<option value="${index}">${escapeHtml(displayName(student.name))}</option>`).join("")}`
     : "<option value=\"\">No students registered yet</option>";
 
   function updateStudentPhotoRequirement() {
@@ -802,7 +1060,7 @@ function initExam() {
       updateStudentProgress();
       return;
     }
-    studentProfileName.textContent = student.name;
+    studentProfileName.textContent = displayName(student.name);
     studentProfileClass.textContent = student.className || "-";
     studentProfileProgram.textContent = student.program || "-";
     studentProfileLevel.textContent = student.level || "-";
@@ -925,7 +1183,7 @@ function initExam() {
     state.endTime = Date.now() + exam.duration * 60 * 1000;
     startScreen.classList.add("hidden");
     examScreen.classList.remove("hidden");
-    document.getElementById("examStudentName").textContent = student.name;
+    document.getElementById("examStudentName").textContent = displayName(student.name);
     document.getElementById("examStudentProgram").textContent = student.program || "-";
     document.getElementById("examStudentClass").textContent = student.className || "-";
     document.getElementById("examStudentLevel").textContent = student.level || "-";
@@ -943,7 +1201,6 @@ function initExam() {
     renderQuestions();
     updateTimer();
     state.timerInterval = setInterval(updateTimer, 1000);
-    if (examScreen.requestFullscreen) examScreen.requestFullscreen().catch(() => {});
   });
 
   function autoSubmitForLeaving(reason) {
@@ -977,12 +1234,6 @@ function initExam() {
     autoSubmitForLeaving("The exam was automatically submitted because the exam window lost focus.");
   });
 
-  document.addEventListener("fullscreenchange", () => {
-    if (state.examStarted && !document.fullscreenElement) {
-      autoSubmitForLeaving("The exam was automatically submitted because fullscreen mode was exited.");
-    }
-  });
-
   ["copy", "cut", "paste", "contextmenu"].forEach(eventName => {
     document.addEventListener(eventName, event => {
       if (state.examStarted) event.preventDefault();
@@ -1000,7 +1251,6 @@ function initExam() {
     state.leaveCountdown = null;
     state.leaveWarningOpen = false;
     document.getElementById("leaveWarningModal").classList.add("hidden");
-    if (examScreen.requestFullscreen && !document.fullscreenElement) examScreen.requestFullscreen().catch(() => {});
   });
 
   document.getElementById("leaveSubmitBtn").addEventListener("click", () => {
@@ -1181,7 +1431,7 @@ function initResult() {
   const result = JSON.parse(raw);
   summary.innerHTML = `
     <p><strong>${escapeHtml(result.examTitle)}</strong></p>
-    <p>Student: <strong>${escapeHtml(result.studentName)}</strong></p>
+    <p>Student: <strong>${escapeHtml(displayName(result.studentName))}</strong></p>
     <p>Class: <strong>${escapeHtml(result.studentClass || "-")}</strong> ·
       Program: <strong>${escapeHtml(result.studentProgram || "-")}</strong> ·
       Level: <strong>${escapeHtml(result.studentLevel || "-")}</strong></p>
@@ -1217,8 +1467,12 @@ function initResult() {
   }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+  if (window.cecCloudReady) await window.cecCloudReady;
+  initProtectedShortcutPage();
+  initLanding();
   initAdmin();
+  initManagement();
   initExam();
   initResult();
 });
