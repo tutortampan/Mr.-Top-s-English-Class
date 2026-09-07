@@ -7,11 +7,15 @@ Example:
 4TH | 1 | VERB | 1 | MEMPEROLEH | ACQUIRE
 
 STUDENT DATABASE FORMAT:
-PROGRAM | CLASS | LEVEL | NAME | PHOTO
+PROGRAM | CLASS | LEVEL | NAME | DATE_OF_BIRTH | PHOTO
 
 PHOTO is optional and can contain an image URL or data URL. Students can also
 choose their own image before starting an exam. Their photo appears at the
 top right of the exam page.
+
+DATE_OF_BIRTH is optional in imported files and should use YYYY-MM-DD when
+possible. If it is missing, the student must enter it before their first exam.
+The tutor can later update the name and date of birth from Classes & Students.
 
 MULTIPLE EXAMS AND QUESTION TYPES:
 The Admin Panel can create multiple exams. Each exam can have an optional

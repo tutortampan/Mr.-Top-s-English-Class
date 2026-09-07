@@ -26,8 +26,7 @@
       }
     });
     if (!response.ok) throw new Error(`Cloud storage request failed (${response.status}).`);
-    const text = await response.text();
-    return text ? JSON.parse(text) : null;
+    return response.status === 204 ? null : response.json();
   }
 
   async function push() {

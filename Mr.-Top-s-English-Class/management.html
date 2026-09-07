@@ -22,7 +22,6 @@
     <a href="index.html" class="back-link">Return to Home</a>
   </section>
 </div>
-
 <div id="managementContent" class="hidden">
   <header class="topbar">
     <a href="index.html" class="logo">MR. TOP'S ENGLISH CLASS</a>
@@ -45,7 +44,6 @@
         <p>Upload a spreadsheet with <strong>PROGRAM, CLASS, LEVEL, NAME</strong>, and optional <strong>PHOTO</strong> columns.</p>
         <label for="managementStudentFile">Upload Student Database (.xlsx / .xls)</label>
         <input id="managementStudentFile" type="file" accept=".xlsx,.xls">
-        <button id="loadStudentDatabaseBtn" class="btn primary small" type="button">Load Student Database</button>
         <p id="managementStudentStatus" class="small-note">No student database loaded.</p>
       </div>
     </section>
@@ -61,39 +59,18 @@
         <div><label for="managementNewClass">New class</label><div class="inline-input"><input id="managementNewClass"><button id="managementAddClass" class="btn secondary small" type="button">Add</button></div></div>
         <div><label for="managementNewLevel">New level</label><div class="inline-input"><input id="managementNewLevel"><button id="managementAddLevel" class="btn secondary small" type="button">Add</button></div></div>
       </div>
-      <button id="editClassesBtn" class="btn secondary small" type="button">Edit</button>
+      <button id="editClassesBtn" class="btn secondary small" type="button">Edit Classes</button>
+
     </section>
     <section id="registeredStudentsSection" class="card">
       <h2>Registered Students</h2>
-      <div class="management-filters">
-        <div class="management-filter-group"><label for="managementFilterProgram">Program</label><select id="managementFilterProgram"><option value="">All programs</option></select></div>
-        <div class="management-filter-group"><label for="managementFilterClass">Class</label><select id="managementFilterClass"><option value="">All classes</option></select></div>
-        <div class="management-filter-group"><label for="managementFilterLevel">Level</label><select id="managementFilterLevel"><option value="">All levels</option></select></div>
-        <div class="management-filter-group"><label for="managementSort">Sort by</label><select id="managementSort">
-          <option value="name-asc">Name (A-Z)</option>
-          <option value="name-desc">Name (Z-A)</option>
-          <option value="age-desc">Age (highest first)</option>
-          <option value="age-asc">Age (lowest first)</option>
-          <option value="program-asc">Program (A-Z)</option>
-          <option value="program-desc">Program (Z-A)</option>
-          <option value="class-asc">Class (A-Z)</option>
-          <option value="class-desc">Class (Z-A)</option>
-          <option value="level-asc">Level (A-Z)</option>
-          <option value="level-desc">Level (Z-A)</option>
-          <option value="score-desc">Score (highest first)</option>
-          <option value="score-asc">Score (lowest first)</option>
-          <option value="grade-asc">Grade (A-Z)</option>
-          <option value="grade-desc">Grade (Z-A)</option>
-        </select></div>
-      </div>
-      <div class="student-table-scroll">
-        <div class="student-management-heading" aria-hidden="true">
-          <span><label class="select-all-label"><input id="selectAllStudents" type="checkbox"> Select all</label></span><span>Name</span><span>Age</span><span>Gender</span><span>Program</span><span>Class</span><span>Level</span><span>Score</span><span>Grade</span><span></span>
-        </div>
-        <div id="managementStudentList" class="student-management-list"></div>
-      </div>
-      <button id="deleteSelectedStudentsBtn" class="btn danger small hidden" type="button">Delete Selected</button>
       <button id="editStudentsBtn" class="btn secondary small" type="button">Edit</button>
+      <div class="management-filters">
+        <label for="managementFilterProgram">Program</label><select id="managementFilterProgram"><option value="">All programs</option></select>
+        <label for="managementFilterClass">Class</label><select id="managementFilterClass"><option value="">All classes</option></select>
+        <label for="managementFilterLevel">Level</label><select id="managementFilterLevel"><option value="">All levels</option></select>
+      </div>
+      <div id="managementStudentList" class="student-management-list"></div>
     </section>
     <section class="card destructive-actions">
       <h2>Danger Zone</h2>

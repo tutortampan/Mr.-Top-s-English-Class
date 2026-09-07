@@ -22,6 +22,89 @@ function displayName(value) {
   return String(value ?? "").trim().toLowerCase().replace(/\b[a-z]/g, letter => letter.toUpperCase());
 }
 
+function formatStudentName(value, gender = "") {
+  const words = displayName(value).split(/\s+/).filter(Boolean);
+  if (!words.length) return "";
+  if (["male", "female"].includes(String(gender).toLowerCase())) {
+    words.unshift(gender.toLowerCase() === "male" ? "Mr." : "Miss");
+  }
+  return words.join(" ");
+}
+
+function compactStudentName(value) {
+  const words = displayName(value).split(/\s+/).filter(Boolean);
+  if (words.length < 3) return words.join(" ");
+  const first = /^(muhammad|muhamad)$/i.test(words[0]) ? "M." : words[0];
+  return [first, ...words.slice(1, -1).map(word => `${word.charAt(0)}.`), words.at(-1)].join(" ");
+}
+
+function sentenceCase(value) {
+  const text = String(value ?? "").trim().toLowerCase();
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
+}
+
+function normalizeDateOfBirth(value) {
+  if (value === undefined || value === null || String(value).trim() === "") return "";
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const date = new Date(Date.UTC(1899, 11, 30) + value * 86400000);
+    return date.toISOString().slice(0, 10);
+  }
+  const text = String(value).trim();
+  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(text)) {
+    const [year, month, day] = text.split("-").map(Number);
+    return `${year.toString().padStart(4, "0")}-${month.toString().padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
+  }
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
+}
+
+function calculateAge(dateOfBirth, today = new Date()) {
+  const value = normalizeDateOfBirth(dateOfBirth);
+  if (!value) return "";
+  const [year, month, day] = value.split("-").map(Number);
+  let age = today.getFullYear() - year;
+  const birthdayPassed = today.getMonth() + 1 > month ||
+    (today.getMonth() + 1 === month && today.getDate() >= day);
+  if (!birthdayPassed) age--;
+  return age >= 0 ? age : "";
+}
+
+function calculateAgeDetails(dateOfBirth, today = new Date()) {
+  const value = normalizeDateOfBirth(dateOfBirth);
+  if (!value) return "";
+  const [year, month, day] = value.split("-").map(Number);
+  const current = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  let years = current.getFullYear() - year;
+  let months = current.getMonth() + 1 - month;
+  let days = current.getDate() - day;
+  if (days < 0) {
+    months--;
+    days += new Date(current.getFullYear(), current.getMonth(), 0).getDate();
+  }
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+  return years >= 0 ? `${years} years, ${months} months, ${days} days` : "";
+}
+
+function daysUntilNextBirthday(dateOfBirth, today = new Date()) {
+  const value = normalizeDateOfBirth(dateOfBirth);
+  if (!value) return "";
+  const [, month, day] = value.split("-").map(Number);
+  const current = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  let nextBirthday = new Date(current.getFullYear(), month - 1, day);
+  if (nextBirthday < current) nextBirthday = new Date(current.getFullYear() + 1, month - 1, day);
+  return Math.round((nextBirthday - current) / 86400000);
+}
+
+function formatDateOfBirth(value) {
+  const normalized = normalizeDateOfBirth(value);
+  if (!normalized) return "-";
+  const [year, month, day] = normalized.split("-");
+  return `${day}/${month}/${year}`;
+}
+
 function authenticateTutor(password) {
   if (password !== TUTOR_PASSWORD) return false;
   sessionStorage.setItem(STORAGE_TUTOR_SESSION, "authenticated");
@@ -62,11 +145,53 @@ function initManagement() {
         password.select();
         return;
       }
-      openManagement();
+      initManagement();
     });
     return;
   }
   openManagement();
+
+  const managementStudentFile = document.getElementById("managementStudentFile");
+  const managementStudentStatus = document.getElementById("managementStudentStatus");
+  document.getElementById("loadStudentDatabaseBtn").addEventListener("click", async () => {
+    const file = managementStudentFile.files[0];
+    if (!file) {
+      alert("Choose a student database file first.");
+      managementStudentFile.focus();
+      return;
+    }
+    managementStudentStatus.textContent = "Reading student database...";
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), {type:"array"});
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {defval:""});
+      const importedStudents = rows.map(row => {
+        const normalized = {};
+        Object.keys(row).forEach(key => {
+          normalized[String(key).trim().toUpperCase().replace(/\s+/g, "_")] = row[key];
+        });
+        return {
+          name: normalized.NAME || normalized.STUDENT_NAME || normalized.STUDENT,
+          className: normalized.CLASS || normalized.CLASS_NAME,
+          program: normalized.PROGRAM,
+          level: normalized.LEVEL || normalized.PROFICIENCY_LEVEL,
+          photo: safePhotoUrl(normalized.PHOTO || normalized.PHOTO_URL),
+          dateOfBirth: normalizeDateOfBirth(normalized.DATE_OF_BIRTH || normalized.DOB || normalized.BIRTH_DATE || normalized.BIRTHDAY)
+        };
+      }).filter(student => student.name);
+      if (!importedStudents.length) throw new Error("No student names found.");
+      localStorage.setItem(STORAGE_STUDENTS, JSON.stringify(importedStudents));
+      importedStudents.forEach(student => {
+        if (student.program) saveOption(STORAGE_PROGRAMS, String(student.program).trim());
+        if (student.level) saveOption(STORAGE_LEVELS, String(student.level).trim());
+        if (student.className) saveOption(STORAGE_CLASSES, String(student.className).trim());
+      });
+      managementStudentStatus.innerHTML = `Loaded: <strong>${escapeHtml(file.name)}</strong>`;
+      renderManagement();
+    } catch (error) {
+      managementStudentStatus.textContent = "Error: Please check the student database format.";
+      alert("The student database could not be read. Make sure it contains a NAME column.");
+    }
+  });
 
   function renderManagement() {
     let students = [];
@@ -85,7 +210,7 @@ function initManagement() {
       const element = document.getElementById(elementId);
       const values = getOptions(key, []).sort((a, b) => String(a).localeCompare(String(b)));
       element.innerHTML = values.length
-        ? values.map(value => `<div class="management-item"><span>${escapeHtml(value)}</span><button class="btn danger small management-delete-option hidden" data-key="${key}" data-value="${escapeHtml(value)}" type="button">Delete</button></div>`).join("")
+        ? values.map(value => `<div class="management-item"><span>${escapeHtml(value)}</span><span class="option-edit-actions"><button class="btn warning small management-rename-option hidden" data-key="${key}" data-value="${escapeHtml(value)}" type="button">Rename</button><button class="btn danger small management-delete-option hidden" data-key="${key}" data-value="${escapeHtml(value)}" type="button">Delete</button></span></div>`).join("")
         : "<p class=\"small-note\">No stored options.</p>";
     });
 
@@ -97,7 +222,9 @@ function initManagement() {
     filterIds.forEach(([id, key, label]) => {
       const select = document.getElementById(id);
       const current = select.value;
-      const values = getOptions(key, []).sort((a, b) => String(a).localeCompare(String(b)));
+      const field = key === STORAGE_PROGRAMS ? "program" : key === STORAGE_CLASSES ? "className" : "level";
+      const values = [...new Set(students.map(student => String(student[field] || "").trim()).filter(Boolean))]
+        .sort((a, b) => String(a).localeCompare(String(b)));
       select.innerHTML = `<option value="">${label}</option>${values.map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join("")}`;
       select.value = values.includes(current) ? current : "";
     });
@@ -105,39 +232,163 @@ function initManagement() {
     const program = document.getElementById("managementFilterProgram").value;
     const className = document.getElementById("managementFilterClass").value;
     const level = document.getElementById("managementFilterLevel").value;
+    const sortBy = document.getElementById("managementSort").value;
+    const resultsByStudent = new Map();
+    getResults().forEach(result => {
+      const key = String(result.studentName || "").trim().toLowerCase();
+      const score = Number(result.score);
+      if (!key || !Number.isFinite(score)) return;
+      const previous = resultsByStudent.get(key);
+      if (!previous || new Date(result.submittedAt || 0) > new Date(previous.submittedAt || 0)) {
+        resultsByStudent.set(key, result);
+      }
+    });
+    const matchesFilter = (value, filter) => !filter ||
+      String(value || "").trim().toLowerCase() === String(filter).trim().toLowerCase();
     const filtered = [...students].reverse().filter(student =>
-      (!program || student.program === program) &&
-      (!className || student.className === className) &&
-      (!level || student.level === level)
+      matchesFilter(student.program, program) &&
+      matchesFilter(student.className, className) &&
+      matchesFilter(student.level, level)
     );
+    filtered.sort((first, second) => {
+      const firstResult = resultsByStudent.get(String(first.name || "").trim().toLowerCase());
+      const secondResult = resultsByStudent.get(String(second.name || "").trim().toLowerCase());
+      const [field, direction = "asc"] = sortBy.split("-");
+      const firstValue = field === "score" ? Number(firstResult?.score ?? -1) : field === "age" ? calculateAge(first.dateOfBirth) || -1 : field === "program" ? first.program : field === "class" ? first.className : field === "level" ? first.level : field === "grade" ? (firstResult?.grade || getGrade(firstResult?.score ?? 0)) : first.name;
+      const secondValue = field === "score" ? Number(secondResult?.score ?? -1) : field === "age" ? calculateAge(second.dateOfBirth) || -1 : field === "program" ? second.program : field === "class" ? second.className : field === "level" ? second.level : field === "grade" ? (secondResult?.grade || getGrade(secondResult?.score ?? 0)) : second.name;
+      const comparison = typeof firstValue === "number" && typeof secondValue === "number"
+        ? firstValue - secondValue
+        : String(firstValue || "").localeCompare(String(secondValue || ""));
+      if (comparison) return direction === "desc" ? -comparison : comparison;
+      return String(first.name || "").localeCompare(String(second.name || ""));
+    });
     const list = document.getElementById("managementStudentList");
     list.innerHTML = filtered.length
-      ? filtered.map(student => `<div class="student-management-item"><span><strong>${escapeHtml(displayName(student.name))}</strong><small>${escapeHtml(student.program || "-")} · ${escapeHtml(student.className || "-")} · ${escapeHtml(student.level || "-")}</small></span><button class="btn danger small management-delete-student edit-only-control hidden" data-name="${escapeHtml(student.name)}" type="button">Delete</button></div>`).join("")
+      ? filtered.map(student => {
+        const result = resultsByStudent.get(String(student.name || "").trim().toLowerCase());
+        const score = result && Number.isFinite(Number(result.score)) ? `${Number(result.score)}%` : "-";
+        const grade = result ? (result.grade || getGrade(result.score)) : "-";
+        const dateOfBirth = normalizeDateOfBirth(student.dateOfBirth);
+        const gender = String(student.gender || "").toLowerCase() === "male" ? "M" : String(student.gender || "").toLowerCase() === "female" ? "F" : "-";
+        return `<div class="student-management-item"><span class="student-select-cell"><input class="student-select edit-only-control hidden" type="checkbox" value="${escapeHtml(student.name)}" aria-label="Select ${escapeHtml(formatStudentName(student.name, student.gender))}"></span><strong title="${escapeHtml(displayName(student.name))}">${escapeHtml(displayName(student.name))}</strong><span class="student-age">${escapeHtml(calculateAge(dateOfBirth) === "" ? "-" : calculateAge(dateOfBirth))}</span><span>${gender}</span><span>${escapeHtml(student.program || "-")}</span><span>${escapeHtml(student.className || "-")}</span><span>${escapeHtml(student.level || "-")}</span><span class="student-score grade-${escapeHtml(grade)}">${escapeHtml(score)}</span><span class="student-grade grade-${escapeHtml(grade)}">${escapeHtml(grade)}</span><span class="student-edit-actions"><button class="btn warning small management-rename-student edit-only-control hidden" data-name="${escapeHtml(student.name)}" type="button">Rename</button><button class="btn danger small management-delete-student edit-only-control hidden" data-name="${escapeHtml(student.name)}" type="button">Delete</button></span></div>`;
+      }).join("")
       : "<p class=\"small-note\">No stored students.</p>";
 
     document.querySelectorAll(".management-delete-option").forEach(button => {
       button.onclick = () => {
-        if (!confirmThreeTimes(`Delete ${button.dataset.value}?`)) return;
         const remaining = getOptions(button.dataset.key, []).filter(value => value !== button.dataset.value);
         localStorage.setItem(button.dataset.key, JSON.stringify(remaining));
         renderManagement();
       };
     });
+    document.querySelectorAll(".management-rename-option").forEach(button => {
+      button.onclick = () => {
+        const currentValue = button.dataset.value;
+        const nextValue = prompt("Rename this option:", currentValue);
+        if (nextValue === null || !nextValue.trim() || nextValue.trim() === currentValue) return;
+        const replacement = nextValue.trim();
+        const values = getOptions(button.dataset.key, []);
+        if (values.some(value => value.toLowerCase() === replacement.toLowerCase())) {
+          alert("That option already exists.");
+          return;
+        }
+        localStorage.setItem(button.dataset.key, JSON.stringify(values.map(value => value === currentValue ? replacement : value)));
+        const field = button.dataset.key === STORAGE_PROGRAMS ? "program" : button.dataset.key === STORAGE_CLASSES ? "className" : "level";
+        const students = readStoredArray(STORAGE_STUDENTS);
+        students.forEach(student => {
+          if (student[field] === currentValue) student[field] = replacement;
+        });
+        localStorage.setItem(STORAGE_STUDENTS, JSON.stringify(students));
+        renderManagement();
+      };
+    });
     document.querySelectorAll(".management-delete-student").forEach(button => {
       button.onclick = () => {
-        if (!confirmThreeTimes(`Delete student ${button.dataset.name} and their saved photo?`)) return;
-        const remaining = students.filter(student => student.name !== button.dataset.name);
-        localStorage.setItem(STORAGE_STUDENTS, JSON.stringify(remaining));
+        deleteStudentData(button.dataset.name);
+        renderManagement();
+      };
+    });
+    document.getElementById("deleteSelectedStudentsBtn").onclick = () => {
+      const selectedNames = [...document.querySelectorAll(".student-select:checked")].map(input => input.value);
+      if (!selectedNames.length) {
+        alert("Select at least one student.");
+        return;
+      }
+      selectedNames.forEach(name => deleteStudentData(name));
+      renderManagement();
+    };
+    document.querySelectorAll(".management-rename-student").forEach(button => {
+      button.onclick = () => {
+        const student = students.find(item => item.name === button.dataset.name);
+        if (!student) return;
+        const nextName = prompt("New student name:", student.name);
+        if (nextName === null || !nextName.trim()) return;
+        const nextDateOfBirth = prompt("Date of birth (YYYY-MM-DD):", normalizeDateOfBirth(student.dateOfBirth));
+        if (nextDateOfBirth === null) return;
+        const nextGender = prompt("Gender (male or female):", student.gender || "");
+        if (nextGender === null) return;
+        if (nextGender.trim() && !["male", "female"].includes(nextGender.trim().toLowerCase())) {
+          alert("Please enter male or female.");
+          return;
+        }
+        const normalizedDate = normalizeDateOfBirth(nextDateOfBirth);
+        if (nextDateOfBirth.trim() && !normalizedDate) {
+          alert("Please enter a valid date of birth.");
+          return;
+        }
+        const oldName = student.name;
+        student.name = nextName.trim();
+        student.dateOfBirth = normalizedDate;
+        student.gender = nextGender.trim().toLowerCase();
+        localStorage.setItem(STORAGE_STUDENTS, JSON.stringify(students));
+        try {
+          const photos = JSON.parse(localStorage.getItem(STORAGE_STUDENT_PHOTOS) || "{}");
+          if (photos[oldName] && !photos[student.name]) photos[student.name] = photos[oldName];
+          delete photos[oldName];
+          localStorage.setItem(STORAGE_STUDENT_PHOTOS, JSON.stringify(photos));
+        } catch (error) {
+          localStorage.removeItem(STORAGE_STUDENT_PHOTOS);
+        }
+        const results = getResults().map(result => result.studentName === oldName ? {...result, studentName: student.name} : result);
+        localStorage.setItem(STORAGE_RESULTS, JSON.stringify(results));
         renderManagement();
       };
     });
     document.getElementById("editStudentsBtn").onclick = () => {
-      document.querySelectorAll(".management-delete-student").forEach(button => button.classList.toggle("hidden"));
+      const button = document.getElementById("editStudentsBtn");
+      const enteringEditMode = button.dataset.editing !== "true";
+      if (!enteringEditMode && !confirm("Save these student list changes?")) return;
+      button.dataset.editing = enteringEditMode ? "true" : "false";
+      button.textContent = enteringEditMode ? "OK" : "Edit";
+      button.classList.toggle("success", enteringEditMode);
+      button.classList.toggle("secondary", !enteringEditMode);
+      document.querySelectorAll(".management-delete-student,.management-rename-student,.student-select").forEach(control => control.classList.toggle("hidden", !enteringEditMode));
       document.getElementById("managementClearStudentsBtn").classList.toggle("hidden");
+      document.getElementById("deleteSelectedStudentsBtn").classList.toggle("hidden", !enteringEditMode);
     };
     document.getElementById("editClassesBtn").onclick = () => {
-      document.querySelectorAll(".management-delete-option").forEach(button => button.classList.toggle("hidden"));
+      const button = document.getElementById("editClassesBtn");
+      const enteringEditMode = button.dataset.editing !== "true";
+      if (!enteringEditMode && !confirm("Save these program, class, and level changes?")) return;
+      button.dataset.editing = enteringEditMode ? "true" : "false";
+      button.textContent = enteringEditMode ? "OK" : "Edit";
+      button.classList.toggle("success", enteringEditMode);
+      button.classList.toggle("secondary", !enteringEditMode);
+      document.querySelectorAll(".management-delete-option,.management-rename-option").forEach(control => control.classList.toggle("hidden", !enteringEditMode));
     };
+    const studentsEditing = document.getElementById("editStudentsBtn").dataset.editing === "true";
+    document.querySelectorAll(".management-delete-student,.management-rename-student,.student-select").forEach(control => control.classList.toggle("hidden", !studentsEditing));
+    document.getElementById("managementClearStudentsBtn").classList.toggle("hidden", !studentsEditing);
+    document.getElementById("deleteSelectedStudentsBtn").classList.toggle("hidden", !studentsEditing);
+    const selectAllStudents = document.getElementById("selectAllStudents");
+    selectAllStudents.closest(".select-all-label").classList.toggle("hidden", !studentsEditing);
+    selectAllStudents.checked = false;
+    selectAllStudents.onchange = () => {
+      document.querySelectorAll(".student-select:not(.hidden)").forEach(input => {
+        input.checked = selectAllStudents.checked;
+      });
+    };
+    document.getElementById("managementSort").onchange = renderManagement;
   }
 
   function addOption(key, inputId) {
@@ -169,40 +420,14 @@ function initManagement() {
     renderManagement();
   };
   document.getElementById("managementClearStudentsBtn").onclick = () => {
-    if (!confirmThreeTimes("Clear all students?")) return;
     localStorage.removeItem(STORAGE_STUDENTS);
     localStorage.removeItem(STORAGE_STUDENT_PHOTOS);
     renderManagement();
   };
-  fileInput.onchange = async event => {
-    const file = event.target.files[0];
-    if (!file) return;
-    try {
-      const workbook = XLSX.read(await file.arrayBuffer(), {type: "array"});
-      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {defval: ""});
-      const imported = rows.map(row => {
-        const normalized = normalizedSpreadsheetRow(row);
-        return {
-          name: normalized.NAME || normalized.STUDENT_NAME || normalized.STUDENT,
-          className: normalized.CLASS || normalized.CLASS_NAME,
-          program: normalized.PROGRAM,
-          level: normalized.LEVEL || normalized.PROFICIENCY_LEVEL,
-          photo: safePhotoUrl(normalized.PHOTO || normalized.PHOTO_URL)
-        };
-      }).filter(student => student.name);
-      if (!imported.length) throw new Error("No student names found.");
-      localStorage.setItem(STORAGE_STUDENTS, JSON.stringify(imported));
-      imported.forEach(student => {
-        if (student.program) saveOption(STORAGE_PROGRAMS, String(student.program).trim());
-        if (student.className) saveOption(STORAGE_CLASSES, String(student.className).trim());
-        if (student.level) saveOption(STORAGE_LEVELS, String(student.level).trim());
-      });
-      document.getElementById("managementStudentStatus").textContent = `Loaded: ${file.name}`;
-      renderManagement();
-    } catch (error) {
-      document.getElementById("managementStudentStatus").textContent = "Error: Please check the student database format.";
-      alert("The student database could not be read. Make sure it contains a NAME column.");
-    }
+  fileInput.onchange = () => {
+    document.getElementById("managementStudentStatus").textContent = fileInput.files[0]
+      ? `Ready to load: ${fileInput.files[0].name}`
+      : "No student database loaded.";
   };
   if (alreadyAuthenticated) openManagement();
 }
@@ -330,6 +555,39 @@ function getResults() {
   const legacy = localStorage.getItem(STORAGE_RESULT);
   if (!legacy) return [];
   try { return [JSON.parse(legacy)]; } catch (error) { return []; }
+}
+
+function deleteStudentData(studentName) {
+  const name = String(studentName || "").trim().toLowerCase();
+  const students = readStoredArray(STORAGE_STUDENTS).filter(student =>
+    String(student.name || "").trim().toLowerCase() !== name
+  );
+  localStorage.setItem(STORAGE_STUDENTS, JSON.stringify(students));
+
+  try {
+    const photos = JSON.parse(localStorage.getItem(STORAGE_STUDENT_PHOTOS) || "{}");
+    Object.keys(photos).forEach(key => {
+      if (String(key).trim().toLowerCase() === name) delete photos[key];
+    });
+    localStorage.setItem(STORAGE_STUDENT_PHOTOS, JSON.stringify(photos));
+  } catch (error) {
+    localStorage.removeItem(STORAGE_STUDENT_PHOTOS);
+  }
+
+  const results = getResults().filter(result =>
+    String(result.studentName || "").trim().toLowerCase() !== name
+  );
+  localStorage.setItem(STORAGE_RESULTS, JSON.stringify(results));
+  if (name) {
+    try {
+      const legacyResult = JSON.parse(localStorage.getItem(STORAGE_RESULT) || "null");
+      if (legacyResult && String(legacyResult.studentName || "").trim().toLowerCase() === name) {
+        localStorage.removeItem(STORAGE_RESULT);
+      }
+    } catch (error) {
+      localStorage.removeItem(STORAGE_RESULT);
+    }
+  }
 }
 
 function questionFromRow(row, index, defaultType) {
@@ -525,15 +783,8 @@ function initAdmin() {
       button.addEventListener("click", () => {
         const name = button.dataset.studentName;
         if (!confirmThreeTimes(`Delete student ${name} and their saved photo?`)) return;
-        loadedStudents = loadedStudents.filter(student => student.name !== name);
-        localStorage.setItem(STORAGE_STUDENTS, JSON.stringify(loadedStudents));
-        try {
-          const photos = JSON.parse(localStorage.getItem(STORAGE_STUDENT_PHOTOS) || "{}");
-          delete photos[name];
-          localStorage.setItem(STORAGE_STUDENT_PHOTOS, JSON.stringify(photos));
-        } catch (error) {
-          localStorage.removeItem(STORAGE_STUDENT_PHOTOS);
-        }
+        deleteStudentData(name);
+        loadedStudents = readStoredArray(STORAGE_STUDENTS);
         showStudentPreview();
         renderStudentManagementList();
         showCurrentExam();
@@ -615,8 +866,7 @@ function initAdmin() {
     if (loadedStudents.length) studentStatus.textContent = "Saved student database loaded.";
   }
 
-  fileInput.addEventListener("change", async (event) => {
-    const file = event.target.files[0];
+  async function loadExamDatabase(file) {
     if (!file) return;
     status.textContent = "Reading Excel file...";
     try {
@@ -660,10 +910,24 @@ function initAdmin() {
       alert("The Excel file could not be read. Make sure it contains INDONESIA and ENGLISH columns.");
       showPreview();
     }
+  }
+
+  fileInput.addEventListener("change", () => {
+    status.textContent = fileInput.files[0]
+      ? `Ready to load: ${fileInput.files[0].name}`
+      : "No Excel file loaded.";
+  });
+  document.getElementById("loadExamDatabaseBtn").addEventListener("click", () => {
+    const file = fileInput.files[0];
+    if (!file) {
+      alert("Choose an exam database file first.");
+      fileInput.focus();
+      return;
+    }
+    loadExamDatabase(file);
   });
 
-  studentFile.addEventListener("change", async (event) => {
-    const file = event.target.files[0];
+  async function loadStudentDatabase(file) {
     if (!file) return;
     studentStatus.textContent = "Reading student database...";
     try {
@@ -680,7 +944,9 @@ function initAdmin() {
           className: normalizedRow.CLASS || normalizedRow.CLASS_NAME,
           program: normalizedRow.PROGRAM,
           level: normalizedRow.LEVEL || normalizedRow.PROFICIENCY_LEVEL,
-          photo: safePhotoUrl(normalizedRow.PHOTO || normalizedRow.PHOTO_URL)
+          photo: safePhotoUrl(normalizedRow.PHOTO || normalizedRow.PHOTO_URL),
+          dateOfBirth: normalizeDateOfBirth(normalizedRow.DATE_OF_BIRTH || normalizedRow.DOB || normalizedRow.BIRTH_DATE || normalizedRow.BIRTHDAY),
+          dateOfBirth: normalizeDateOfBirth(normalizedRow.DATE_OF_BIRTH || normalizedRow.DOB || normalizedRow.BIRTH_DATE || normalizedRow.BIRTHDAY)
         };
       }).filter(student => student.name);
 
@@ -700,6 +966,12 @@ function initAdmin() {
       alert("The student database could not be read. Make sure it contains a NAME column.");
       showStudentPreview();
     }
+  }
+
+  studentFile.addEventListener("change", () => {
+    studentStatus.textContent = studentFile.files[0]
+      ? `Ready to load: ${studentFile.files[0].name}`
+      : "No student database loaded.";
   });
 
   document.getElementById("loadDemoBtn").addEventListener("click", () => {
@@ -1026,10 +1298,30 @@ function initExam() {
   const studentProfileClass = document.getElementById("studentProfileClass");
   const studentProfileProgram = document.getElementById("studentProfileProgram");
   const studentProfileLevel = document.getElementById("studentProfileLevel");
-  const studentPhotoUpload = document.getElementById("studentPhotoUpload");
-  const studentPhotoLabel = document.getElementById("studentPhotoLabel");
-  const studentPhotoHint = document.getElementById("studentPhotoHint");
+  const studentProfileAge = document.getElementById("studentProfileAge");
+  const studentProfileDob = document.getElementById("studentProfileDob");
+  const studentProfileBirthday = document.getElementById("studentProfileBirthday");
+  const studentProfileResults = document.getElementById("studentProfileResults");
+  const studentProfileAverageScore = document.getElementById("studentProfileAverageScore");
+  const studentProfileAverageGrade = document.getElementById("studentProfileAverageGrade");
+  const studentDobField = document.getElementById("studentDobField");
+  const studentDob = document.getElementById("studentDob");
+  const studentGenderField = document.getElementById("studentGenderField");
+  const studentGender = document.getElementById("studentGender");
+  const studentPhotoCapture = document.getElementById("studentPhotoCapture");
+  const studentCameraPreview = document.getElementById("studentCameraPreview");
+  const studentCameraFlash = document.getElementById("studentCameraFlash");
+  const studentPhotoStatus = document.getElementById("studentPhotoStatus");
   const examStudentPhoto = document.getElementById("examStudentPhoto");
+  function updateStudentProfileGrade(grade) {
+    const gradeClasses = ["grade-S", "grade-A", "grade-B", "grade-C", "grade-D", "grade-E", "grade-F"];
+    studentProfileAverageScore.classList.remove(...gradeClasses);
+    studentProfileAverageGrade.classList.remove(...gradeClasses);
+    if (grade) {
+      studentProfileAverageScore.classList.add(`grade-${grade}`);
+      studentProfileAverageGrade.classList.add(`grade-${grade}`);
+    }
+  }
   let photoOverrides = {};
   try {
     photoOverrides = JSON.parse(localStorage.getItem(STORAGE_STUDENT_PHOTOS) || "{}");
@@ -1039,31 +1331,73 @@ function initExam() {
 
   studentSelect.innerHTML = students.length
     ? `<option value="">Select your name</option>${students.map((student, index) =>
-      `<option value="${index}">${escapeHtml(displayName(student.name))}</option>`).join("")}`
+      `<option value="${index}">${escapeHtml(formatStudentName(student.name, student.gender))}</option>`).join("")}`
     : "<option value=\"\">No students registered yet</option>";
+
+  let cameraStream = null;
+  let cameraCaptureToken = 0;
+
+  function stopStudentCamera() {
+    cameraCaptureToken += 1;
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      cameraStream = null;
+    }
+    studentCameraPreview.srcObject = null;
+    studentPhotoCapture.classList.add("hidden");
+  }
 
   function updateStudentPhotoRequirement() {
     const student = students[Number(studentSelect.value)];
-    const hasUploadedPhoto = Boolean(student && safePhotoUrl(photoOverrides[student.name]));
-    studentPhotoUpload.required = Boolean(student && !hasUploadedPhoto);
-    studentPhotoLabel.textContent = hasUploadedPhoto ? "Replace Your Photo (optional)" : "Upload Your Photo (required)";
-    studentPhotoHint.textContent = hasUploadedPhoto
-      ? "Your photo is saved. You can upload a replacement if you want."
-      : "Please upload a photo before starting. It will be saved for future exams.";
+    const hasStoredPhoto = Boolean(student && safePhotoUrl(photoOverrides[student.name] || student.photo));
+    if (!student || hasStoredPhoto) {
+      studentPhotoCapture.classList.add("hidden");
+      return;
+    }
+    studentPhotoStatus.textContent = "Camera photo is required. Keep looking at the camera...";
+    studentPhotoCapture.classList.remove("hidden");
   }
 
   function updateStudentProfile() {
     const student = students[Number(studentSelect.value)];
     if (!student) {
+      stopStudentCamera();
       studentProfile.classList.add("hidden");
+      studentProfileResults.classList.add("hidden");
+      studentDobField.classList.add("hidden");
+      studentGenderField.classList.add("hidden");
+      studentDob.required = false;
+      studentGender.required = false;
       updateStudentPhotoRequirement();
       updateStudentProgress();
       return;
     }
-    studentProfileName.textContent = displayName(student.name);
+    studentProfileName.textContent = formatStudentName(student.name, student.gender);
     studentProfileClass.textContent = student.className || "-";
     studentProfileProgram.textContent = student.program || "-";
     studentProfileLevel.textContent = student.level || "-";
+    const dateOfBirth = normalizeDateOfBirth(student.dateOfBirth);
+    studentProfileAge.textContent = dateOfBirth
+      ? `Age: ${calculateAgeDetails(dateOfBirth)}`
+      : "Date of birth is required before your first exam.";
+    studentProfileDob.textContent = dateOfBirth ? `Date of birth: ${formatDateOfBirth(dateOfBirth)}` : "";
+    const birthdayDays = dateOfBirth ? daysUntilNextBirthday(dateOfBirth) : "";
+    studentProfileBirthday.textContent = dateOfBirth
+      ? birthdayDays === 0 ? "Happy birthday!" : `Next birthday: ${birthdayDays} day${birthdayDays === 1 ? "" : "s"}`
+      : "";
+    const history = getResults().filter(result => result.studentName === student.name);
+    const scores = history.map(result => Number(result.score)).filter(Number.isFinite);
+    const averageScore = scores.length ? scores.reduce((total, score) => total + score, 0) / scores.length : null;
+    studentProfileAverageScore.textContent = averageScore === null ? "-" : `${averageScore.toFixed(1)}%`;
+    const averageGrade = averageScore === null ? "" : getGrade(averageScore);
+    studentProfileAverageGrade.textContent = averageGrade || "-";
+    updateStudentProfileGrade(averageGrade);
+    studentDob.value = dateOfBirth;
+    studentDob.required = !dateOfBirth;
+    studentDobField.classList.toggle("hidden", Boolean(dateOfBirth));
+    studentGender.value = student.gender || "";
+    studentGender.required = !student.gender;
+    studentGenderField.classList.toggle("hidden", Boolean(student.gender));
     const photo = safePhotoUrl(photoOverrides[student.name] || student.photo);
     if (photo) {
       studentPhoto.src = photo;
@@ -1073,13 +1407,35 @@ function initExam() {
       studentPhoto.classList.add("hidden");
     }
     studentProfile.classList.remove("hidden");
+    studentProfileResults.classList.remove("hidden");
     updateStudentPhotoRequirement();
     updateStudentProgress();
   }
 
   studentSelect.addEventListener("change", () => {
+    stopStudentCamera();
     updateStudentProfile();
     refreshExamOptions();
+    captureStudentPhoto();
+  });
+  studentDob.addEventListener("input", () => {
+    const dateOfBirth = normalizeDateOfBirth(studentDob.value);
+    studentProfileAge.textContent = dateOfBirth
+      ? `Age: ${calculateAgeDetails(dateOfBirth)}`
+      : "Date of birth is required before your first exam.";
+    studentProfileDob.textContent = dateOfBirth ? `Date of birth: ${formatDateOfBirth(dateOfBirth)}` : "";
+    const birthdayDays = dateOfBirth ? daysUntilNextBirthday(dateOfBirth) : "";
+    studentProfileBirthday.textContent = dateOfBirth
+      ? birthdayDays === 0 ? "Happy birthday!" : `Next birthday: ${birthdayDays} day${birthdayDays === 1 ? "" : "s"}`
+      : "";
+    const student = students[Number(studentSelect.value)];
+    const history = student ? getResults().filter(result => result.studentName === student.name) : [];
+    const scores = history.map(result => Number(result.score)).filter(Number.isFinite);
+    const averageScore = scores.length ? scores.reduce((total, score) => total + score, 0) / scores.length : null;
+    studentProfileAverageScore.textContent = averageScore === null ? "-" : `${averageScore.toFixed(1)}%`;
+    const averageGrade = averageScore === null ? "" : getGrade(averageScore);
+    studentProfileAverageGrade.textContent = averageGrade || "-";
+    updateStudentProfileGrade(averageGrade);
   });
   examSelect.addEventListener("change", updateExamSummary);
   updateStudentPhotoRequirement();
@@ -1097,7 +1453,7 @@ function initExam() {
     const result = history.find(item => item.examId === exam.id);
     const completed = history.length;
     studentHistory.innerHTML = history.length
-      ? `<strong>Previous exam records</strong>${history.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt)).map(item => { const grade = item.grade || getGrade(item.score); return `<div class="history-row"><span>${escapeHtml(item.examTitle)}<small>${item.correct} / ${item.total} correct · ${item.points ?? item.correct} points</small></span><strong>${escapeHtml(item.score)}% · <span class="grade-${grade}">Grade ${escapeHtml(grade)}</span></strong></div>`; }).join("")}`
+      ? `<strong>Previous exam records</strong>${history.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt)).map(item => { const grade = item.grade || getGrade(item.score); return `<div class="history-row"><span>${escapeHtml(item.examTitle)}<small>${item.correct} / ${item.total} correct · ${item.points ?? item.correct} points</small></span><strong class="history-result"><span>${escapeHtml(item.score)}%</span><span class="grade-${grade}">Grade ${escapeHtml(grade)}</span></strong></div>`; }).join("")}`
       : "";
     studentProgress.innerHTML = result
       ? `<strong>Previous result:</strong> ${escapeHtml(result.score)}% on ${escapeHtml(result.examTitle)}<br><span>${completed} exam(s) completed. You can review results after submission.</span>`
@@ -1111,23 +1467,55 @@ function initExam() {
     }
   }
 
-  studentPhotoUpload.addEventListener("change", () => {
+  async function captureStudentPhoto() {
     const student = students[Number(studentSelect.value)];
-    const file = studentPhotoUpload.files[0];
-    if (!student || !file) return;
-    if (!file.type.startsWith("image/")) {
-      alert("Please choose an image file.");
-      studentPhotoUpload.value = "";
-      return;
-    }
-    const reader = new FileReader();
-    reader.addEventListener("load", () => {
-      photoOverrides[student.name] = reader.result;
+    if (!student || safePhotoUrl(photoOverrides[student.name] || student.photo)) return;
+    const token = cameraCaptureToken;
+    studentPhotoCapture.classList.remove("hidden");
+    studentPhotoStatus.textContent = "Allow camera access. Your photo will be taken automatically.";
+    try {
+      cameraStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 1280 } },
+        audio: false
+      });
+      if (token !== cameraCaptureToken || students[Number(studentSelect.value)] !== student) {
+        stopStudentCamera();
+        return;
+      }
+      studentCameraPreview.srcObject = cameraStream;
+      await new Promise(resolve => {
+        studentCameraPreview.addEventListener("loadedmetadata", resolve, { once: true });
+      });
+      const track = cameraStream.getVideoTracks()[0];
+      const capabilities = typeof track.getCapabilities === "function" ? track.getCapabilities() : {};
+      if (capabilities.torch) {
+        await track.applyConstraints({ advanced: [{ torch: true }] });
+      }
+      studentPhotoStatus.textContent = "Hold still... taking your photo.";
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      if (token !== cameraCaptureToken) return;
+      const canvas = document.createElement("canvas");
+      canvas.width = studentCameraPreview.videoWidth;
+      canvas.height = studentCameraPreview.videoHeight;
+      canvas.getContext("2d").drawImage(studentCameraPreview, 0, 0, canvas.width, canvas.height);
+      studentCameraFlash.classList.remove("active");
+      void studentCameraFlash.offsetWidth;
+      studentCameraFlash.classList.add("active");
+      photoOverrides[student.name] = canvas.toDataURL("image/jpeg", 0.88);
       localStorage.setItem(STORAGE_STUDENT_PHOTOS, JSON.stringify(photoOverrides));
+      studentPhotoStatus.textContent = "Photo saved for this student.";
       updateStudentProfile();
-    });
-    reader.readAsDataURL(file);
-  });
+    } catch (error) {
+      studentPhotoStatus.textContent = "Camera access is required before starting the exam.";
+      alert("The camera could not take the photo. Please allow camera access and choose the name again.");
+    } finally {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        cameraStream = null;
+      }
+      studentCameraPreview.srcObject = null;
+    }
+  }
 
   let state = {
     current: 0,
@@ -1138,6 +1526,8 @@ function initExam() {
     studentClass: "",
     studentProgram: "",
     studentLevel: "",
+    studentDateOfBirth: "",
+    studentGender: "",
     studentPhoto: "",
     examDate: "",
     submitAttempts: 0,
@@ -1157,11 +1547,25 @@ function initExam() {
       alert("Please choose your name from the student list.");
       return;
     }
-    if (!safePhotoUrl(photoOverrides[student.name])) {
-      alert("Please upload your photo before starting the exam.");
-      studentPhotoUpload.focus();
+    if (!safePhotoUrl(photoOverrides[student.name] || student.photo)) {
+      alert("Please allow the camera to take your photo before starting the exam.");
       return;
     }
+    const dateOfBirth = normalizeDateOfBirth(studentDob.value);
+    if (!dateOfBirth) {
+      alert("Please enter your date of birth before starting the exam.");
+      studentDobField.classList.remove("hidden");
+      studentDob.focus();
+      return;
+    }
+    if (!student.gender && !studentGender.value) {
+      alert("Please select your gender before starting the exam.");
+      studentGender.focus();
+      return;
+    }
+    student.dateOfBirth = dateOfBirth;
+    student.gender = student.gender || studentGender.value;
+    localStorage.setItem(STORAGE_STUDENTS, JSON.stringify(students));
     const history = getResults().filter(result => result.studentName === student.name);
     const prerequisite = exams.find(item => item.id === exam.prerequisiteExamId);
     const prerequisiteResult = prerequisite && history.find(item => item.examId === prerequisite.id);
@@ -1170,9 +1574,11 @@ function initExam() {
       return;
     }
     state.studentName = student.name;
+    state.studentGender = student.gender;
     state.studentClass = student.className || "";
     state.studentProgram = student.program || "";
     state.studentLevel = student.level || "";
+    state.studentDateOfBirth = dateOfBirth;
     state.studentPhoto = safePhotoUrl(photoOverrides[student.name] || student.photo);
     activeQuestions = exam.randomizeQuestions ? [...exam.questions].sort(() => Math.random() - 0.5) : exam.questions;
     state.answers = Array(activeQuestions.length).fill("");
@@ -1183,7 +1589,7 @@ function initExam() {
     state.endTime = Date.now() + exam.duration * 60 * 1000;
     startScreen.classList.add("hidden");
     examScreen.classList.remove("hidden");
-    document.getElementById("examStudentName").textContent = displayName(student.name);
+    document.getElementById("examStudentName").textContent = formatStudentName(student.name, student.gender);
     document.getElementById("examStudentProgram").textContent = student.program || "-";
     document.getElementById("examStudentClass").textContent = student.className || "-";
     document.getElementById("examStudentLevel").textContent = student.level || "-";
@@ -1213,6 +1619,7 @@ function initExam() {
     const countdown = document.getElementById("leaveCountdown");
     document.getElementById("leaveWarningText").textContent = `${reason} Are you sure you want to leave?`;
     countdown.textContent = secondsLeft;
+    leaveModal.classList.add("leave-warning-active");
     leaveModal.classList.remove("hidden");
     state.leaveCountdown = setInterval(() => {
       secondsLeft--;
@@ -1220,6 +1627,7 @@ function initExam() {
       if (secondsLeft <= 0) {
         clearInterval(state.leaveCountdown);
         state.leaveCountdown = null;
+        leaveModal.classList.remove("leave-warning-active");
         leaveModal.classList.add("hidden");
         submitExam(true, state.leaveReason);
       }
@@ -1249,6 +1657,7 @@ function initExam() {
   document.getElementById("stayOnExamBtn").addEventListener("click", () => {
     clearInterval(state.leaveCountdown);
     state.leaveCountdown = null;
+    document.getElementById("leaveWarningModal").classList.remove("leave-warning-active");
     state.leaveWarningOpen = false;
     document.getElementById("leaveWarningModal").classList.add("hidden");
   });
@@ -1256,6 +1665,7 @@ function initExam() {
   document.getElementById("leaveSubmitBtn").addEventListener("click", () => {
     clearInterval(state.leaveCountdown);
     state.leaveCountdown = null;
+    document.getElementById("leaveWarningModal").classList.remove("leave-warning-active");
     document.getElementById("leaveWarningModal").classList.add("hidden");
     submitExam(true, state.leaveReason);
   });
@@ -1391,9 +1801,11 @@ function initExam() {
       examId: exam.id,
       examTitle: exam.title,
       studentName: state.studentName,
+      studentGender: state.studentGender,
       studentClass: state.studentClass,
       studentProgram: state.studentProgram,
       studentLevel: state.studentLevel,
+      studentDateOfBirth: state.studentDateOfBirth,
       studentPhoto: state.studentPhoto,
       examDate: state.examDate,
       submittedAt: new Date().toISOString(),
@@ -1431,30 +1843,33 @@ function initResult() {
   const result = JSON.parse(raw);
   summary.innerHTML = `
     <p><strong>${escapeHtml(result.examTitle)}</strong></p>
-    <p>Student: <strong>${escapeHtml(displayName(result.studentName))}</strong></p>
+    <p class="result-student-name">Student: <strong>${escapeHtml(formatStudentName(result.studentName, result.studentGender))}</strong></p>
     <p>Class: <strong>${escapeHtml(result.studentClass || "-")}</strong> ·
       Program: <strong>${escapeHtml(result.studentProgram || "-")}</strong> ·
       Level: <strong>${escapeHtml(result.studentLevel || "-")}</strong></p>
     <p>Exam date: <strong>${escapeHtml(result.examDate || "-")}</strong></p>
-    ${result.studentPhoto ? `<img class="result-photo" src="${escapeHtml(safePhotoUrl(result.studentPhoto))}" alt="">` : ""}
-    <div class="score-circle">${result.score}%</div>
-    <p class="score-breakdown"><strong>${result.points ?? result.correct}</strong> / ${result.total} points (${result.score}%) · <span class="grade-${result.grade || getGrade(result.score)}">Grade <strong>${escapeHtml(result.grade || getGrade(result.score))}</strong></span></p>
+    <div class="result-visuals">
+      ${result.studentPhoto ? `<img class="result-photo" src="${escapeHtml(safePhotoUrl(result.studentPhoto))}" alt="">` : ""}
+      <div class="score-circle">${result.score}%</div>
+    </div>
+    <div class="result-grade grade-${result.grade || getGrade(result.score)}">Grade ${escapeHtml(result.grade || getGrade(result.score))}</div>
+    <p class="score-breakdown"><strong>${result.points ?? result.correct}</strong> / ${result.total} points</p>
     <div class="stats">
-      <div class="stat"><strong>${result.total}</strong>Total</div>
-      <div class="stat"><strong>${result.correct}</strong>Correct</div>
+      <div class="stat total-stat"><strong>${result.total}</strong>Total</div>
+      <div class="stat correct-stat"><strong>${result.correct}</strong>Correct</div>
       <div class="stat half-credit-stat"><strong>${result.halfCredit || 0}</strong>Half credit</div>
-      <div class="stat"><strong>${result.wrong}</strong>Wrong</div>
+      <div class="stat wrong-stat"><strong>${result.wrong}</strong>Wrong</div>
     </div>
     <p>${escapeHtml(result.submissionMessage || (result.autoSubmitted ? "Automatically submitted because time expired." : "Exam submitted successfully."))}</p>`;
 
   const reviewList = document.getElementById("reviewList");
   reviewList.innerHTML = result.review.map(item => `
     <article class="review-item ${item.partial ? "partial" : (item.correct ? "correct" : "wrong")}">
-      <h3>${item.no}. ${escapeHtml(item.question)}</h3>
+      <h3>${item.no}. ${escapeHtml(sentenceCase(item.question))}</h3>
       <p>Type: ${escapeHtml(item.type || "-")}</p>
       <p>Your answer: <strong>${escapeHtml(item.studentAnswer || "(No answer)")}</strong></p>
       <p>Correct answer: <strong>${escapeHtml(item.correctAnswer)}</strong></p>
-      <strong>${item.partial ? "✓ CORRECT - HALF CREDIT" : (item.correct ? "✓ CORRECT" : "✗ WRONG")}</strong>
+      <strong class="review-status">${item.partial ? "✓ CORRECT - HALF CREDIT" : (item.correct ? "✓ CORRECT" : "✗ WRONG")}</strong>
     </article>`).join("");
 
   const resultHistory = document.getElementById("resultHistory");

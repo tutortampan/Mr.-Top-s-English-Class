@@ -12,11 +12,10 @@
 <div id="startScreen" class="center-screen">
   <section class="card start-card">
     <div class="brand">MR. TOP'S ENGLISH CLASS</div>
-    <h1 id="startTitle">Vocabulary Examination</h1>
-    <p id="startDescription">Choose an exam and enter your name before starting.</p>
-    <p class="exam-rule-note">Leaving this page or window submits the exam automatically.</p>
-    <label for="examSelect">Choose Exam</label>
-    <select id="examSelect"><option value="">Loading exams...</option></select>
+    <div id="studentProfileResults" class="student-profile-results hidden">
+      <div><span>Overall score</span><strong id="studentProfileAverageScore">-</strong></div>
+      <div><span>Grade</span><strong id="studentProfileAverageGrade">-</strong></div>
+    </div>
     <label for="studentName">Choose Your Name</label>
     <select id="studentName">
       <option value="">Loading student database...</option>
@@ -25,13 +24,35 @@
       <img id="studentPhoto" class="student-photo" alt="">
       <div>
         <strong id="studentProfileName"></strong>
-        <span id="studentProfileProgram"></span>
-        <span class="student-class-level"><span id="studentProfileClass"></span><span class="class-level-separator"> - </span><span id="studentProfileLevel"></span></span>
+        <span class="student-program-class-level"><span id="studentProfileProgram"></span><span class="class-level-separator"> · </span><span id="studentProfileClass"></span><span class="class-level-separator"> · </span><span id="studentProfileLevel"></span></span>
+        <span id="studentProfileAge"></span>
+        <span class="student-profile-dates"><span id="studentProfileDob"></span><span id="studentProfileBirthday"></span></span>
       </div>
     </div>
-    <label for="studentPhotoUpload" id="studentPhotoLabel">Upload Your Photo</label>
-    <input id="studentPhotoUpload" type="file" accept="image/*" capture="user">
-    <p id="studentPhotoHint" class="small-note">A photo is required the first time. You can replace it later.</p>
+    <label for="examSelect">Choose Exam</label>
+    <select id="examSelect"><option value="">Loading exams...</option></select>
+    <h1 id="startTitle">Vocabulary Examination</h1>
+    <p id="startDescription">Choose an exam and enter your name before starting.</p>
+    <p class="exam-rule-note">Leaving this page or window submits the exam automatically.</p>
+    <div id="studentDobField" class="hidden">
+      <label for="studentDob">Date of Birth</label>
+      <input id="studentDob" type="date" autocomplete="bday">
+      <p id="studentDobHint" class="small-note">Your date of birth is required the first time you take an exam.</p>
+    </div>
+    <div id="studentGenderField" class="hidden">
+      <label for="studentGender">Gender</label>
+      <select id="studentGender">
+        <option value="">Select gender</option>
+        <option value="male">Male</option>
+        <option value="female">Female</option>
+      </select>
+      <p class="small-note">Gender is required the first time you take an exam.</p>
+    </div>
+    <div id="studentPhotoCapture" class="student-photo-capture hidden">
+      <video id="studentCameraPreview" class="student-camera-preview" autoplay playsinline muted></video>
+      <div id="studentCameraFlash" class="student-camera-flash"></div>
+      <p id="studentPhotoStatus" class="small-note">Preparing the camera...</p>
+    </div>
     <div id="studentProgress" class="student-progress"></div>
     <div id="studentHistory" class="student-history"></div>
     <button id="startExamBtn" class="btn primary full">Start Exam</button>
@@ -48,8 +69,7 @@
       </div>
       <div id="studentDisplay" class="student-display">
         <strong id="examStudentName"></strong>
-        <span id="examStudentProgram"></span>
-        <span class="student-class-level"><span id="examStudentClass"></span><span class="class-level-separator"> - </span><span id="examStudentLevel"></span></span>
+        <span class="student-program-class-level"><span id="examStudentProgram"></span><span class="class-level-separator"> · </span><span id="examStudentClass"></span><span class="class-level-separator"> · </span><span id="examStudentLevel"></span></span>
       </div>
       <div class="header-side-block header-grade-block">
         <strong id="examGrade" class="exam-grade">-</strong>
