@@ -27,30 +27,58 @@
   <header class="topbar">
     <a href="index.html" class="logo">MR. TOP'S ENGLISH CLASS</a>
     <div class="button-row">
-      <nav class="admin-tabs" aria-label="Admin sections">
-        <a href="management.html" class="admin-tab active">Classes &amp; Students</a>
-        <a href="admin.html" class="admin-tab">Exams</a>
+      <nav class="admin-tabs" aria-label="Management sections">
+        <a href="admin.html#database" class="admin-tab" data-management-tab="database">Database</a>
+        <a href="management.html#classes" class="admin-tab active" data-management-tab="classes">Classes</a>
+        <a href="management.html#students" class="admin-tab" data-management-tab="students">Students</a>
+        <a href="admin.html#exams" class="admin-tab" data-management-tab="exams">Exams</a>
       </nav>
       <button id="managementLogoutBtn" class="btn secondary small" type="button">Log Out</button>
     </div>
   </header>
   <main class="container">
     <section class="page-heading">
-      <h1>Classes & Students</h1>
-      <p>Only tutors can manage the student roster, programs, classes, and levels.</p>
+      <h1>Management Panel</h1>
+      <p>Use the tabs to manage database operations, classes, students, and exams.</p>
     </section>
-    <section id="studentWorkspaceSection" class="card admin-grid">
+    <section id="studentWorkspaceSection" class="card admin-grid" data-management-panel="students">
       <div>
         <h2>Student Database</h2>
-        <p>Upload a spreadsheet with <strong>PROGRAM, CLASS, LEVEL, NAME</strong>, and optional <strong>PHOTO</strong> columns.</p>
+        <p>Upload a spreadsheet with <strong>NAME, PROGRAM, CLASS, and LEVEL</strong>. <strong>STUDENT_ID</strong> is optional and only needed if you want to keep a stable student identifier.</p>
         <label for="managementStudentFile">Upload Student Database (.xlsx / .xls)</label>
         <input id="managementStudentFile" type="file" accept=".xlsx,.xls">
         <button id="loadStudentDatabaseBtn" class="btn primary small" type="button">Load Student Database</button>
         <p id="managementStudentStatus" class="small-note">No student database loaded.</p>
       </div>
+      <div class="manual-student-box">
+        <h2>Add Student Manually</h2>
+        <form id="manualStudentForm" class="manual-student-form">
+          <label for="manualStudentName">Full name</label>
+          <input id="manualStudentName" required>
+          <label for="manualStudentId">Student ID <span class="small-note">(optional)</span></label>
+          <input id="manualStudentId">
+          <label for="manualStudentDob">Date of birth <span class="small-note">(optional)</span></label>
+          <input id="manualStudentDob" type="date">
+          <label for="manualStudentGender">Gender</label>
+          <select id="manualStudentGender">
+            <option value="">Select gender</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+            <option value="other">Other</option>
+          </select>
+          <label for="manualStudentProgram">Program</label>
+          <select id="manualStudentProgram"><option value="">Select program</option></select>
+          <label for="manualStudentClass">Class</label>
+          <select id="manualStudentClass"><option value="">Select class</option></select>
+          <label for="manualStudentLevel">Level</label>
+          <select id="manualStudentLevel"><option value="">Select level</option></select>
+          <button class="btn primary small" type="submit">Add Student</button>
+          <p id="manualStudentStatus" class="small-note" role="status"></p>
+        </form>
+      </div>
     </section>
-    <section id="classWorkspaceSection" class="card">
-      <h2>Manage Programs, Classes, and Levels</h2>
+    <section id="classWorkspaceSection" class="card" data-management-panel="classes">
+      <h2>Manage Programs and Classes</h2>
       <div class="managed-lists">
         <div><h3>Programs</h3><div id="managementProgramList" class="management-list"></div></div>
         <div><h3>Classes</h3><div id="managementClassList" class="management-list"></div></div>
@@ -63,7 +91,7 @@
       </div>
       <button id="editClassesBtn" class="btn secondary small" type="button">Edit</button>
     </section>
-    <section id="registeredStudentsSection" class="card">
+    <section id="registeredStudentsSection" class="card" data-management-panel="students">
       <h2>Registered Students</h2>
       <div class="management-filters">
         <div class="management-filter-group"><label for="managementFilterProgram">Program</label><select id="managementFilterProgram"><option value="">All programs</option></select></div>
@@ -92,13 +120,46 @@
         </div>
         <div id="managementStudentList" class="student-management-list"></div>
       </div>
+      <div id="managementStudentPagination" class="pagination" aria-label="Student list pages"></div>
       <button id="deleteSelectedStudentsBtn" class="btn danger small hidden" type="button">Delete Selected</button>
       <button id="editStudentsBtn" class="btn secondary small" type="button">Edit</button>
     </section>
-    <section class="card destructive-actions">
-      <h2>Danger Zone</h2>
+    <section id="dataQualitySection" class="card" data-management-panel="database">
+      <h2>Data Quality &amp; Audit</h2>
+      <p class="small-note">Issues are detected from the current local data only. Historical records are never deleted automatically.</p>
+      <div id="dataQualitySummary" class="summary-grid"></div>
+      <div id="dataQualityList" class="management-list"></div>
+      <h3>Recent administrative activity</h3>
+      <div id="auditActivityList" class="management-list"></div>
+    </section>
+    <section class="card settings-box settings-actions" data-management-panel="database">
+      <h2>Settings</h2>
       <button id="managementDemoStudentsBtn" class="btn secondary" type="button">Load Demo Students</button>
       <button id="managementClearStudentsBtn" class="btn danger hidden edit-only-control" type="button">Clear Students</button>
+      <div id="passwordWorkspaceSection">
+        <h3>Change Admin Password</h3>
+        <form id="changeTutorPasswordForm" class="password-change-form">
+          <label for="currentTutorPassword">Current password</label>
+          <input id="currentTutorPassword" type="password" autocomplete="current-password" required>
+          <label for="newTutorPassword">New password</label>
+          <input id="newTutorPassword" type="password" autocomplete="new-password" minlength="3" required>
+          <label for="confirmTutorPassword">Confirm new password</label>
+          <input id="confirmTutorPassword" type="password" autocomplete="new-password" minlength="3" required>
+          <button class="btn secondary small" type="submit">Change Password</button>
+          <p id="changeTutorPasswordStatus" class="small-note" role="status"></p>
+        </form>
+      </div>
+      <div id="backupSection">
+        <h3>Backup &amp; Restore</h3>
+        <p class="small-note">Backups contain local student, exam, result, progress, configuration, and audit data. Passwords and session tokens are never exported.</p>
+        <div class="button-row">
+          <button id="downloadBackupBtn" class="btn secondary" type="button">Download Backup</button>
+          <label class="btn secondary" for="restoreBackupFile">Select Backup</label>
+          <input id="restoreBackupFile" type="file" accept="application/json,.json" class="hidden">
+        </div>
+        <div id="backupValidation" class="small-note" role="status">No backup selected.</div>
+        <button id="restoreBackupBtn" class="btn danger" type="button" disabled>Restore Backup</button>
+      </div>
     </section>
   </main>
 </div>

@@ -27,9 +27,11 @@
 <header class="topbar">
   <a href="index.html" class="logo">MR. TOP'S ENGLISH CLASS</a>
   <div class="button-row">
-    <nav class="admin-tabs" aria-label="Admin sections">
-      <a href="management.html" class="admin-tab">Classes &amp; Students</a>
-      <a href="admin.html" class="admin-tab active">Exams</a>
+    <nav class="admin-tabs" aria-label="Management sections">
+      <a href="admin.html#database" class="admin-tab" data-management-tab="database">Database</a>
+      <a href="management.html#classes" class="admin-tab" data-management-tab="classes">Classes</a>
+      <a href="management.html#students" class="admin-tab" data-management-tab="students">Students</a>
+      <a href="admin.html#exams" class="admin-tab active" data-management-tab="exams">Exams</a>
     </nav>
     <button id="adminLogoutBtn" class="btn secondary small" type="button">Log Out</button>
   </div>
@@ -37,15 +39,15 @@
 
 <main class="container">
   <section class="page-heading">
-    <h1>Admin Panel</h1>
-    <p class="admin-nav-note">Exam workspace: add, edit, view, and delete exams only.</p>
-    <p>Upload an Excel file with <strong>WEEK, DAY, TYPE, NO, QUESTION, ENGLISH</strong>. For dropdown questions, add <strong>OPTION_A</strong> through <strong>OPTION_J</strong> and <strong>CORRECT_OPTION</strong>.</p>
+    <h1>Management Panel</h1>
+    <p class="admin-nav-note">Use the tabs to manage database operations, classes, students, and exams.</p>
+    <p data-management-panel="exams">Upload an Excel file with <strong>WEEK, DAY, TYPE, NO, QUESTION, ENGLISH</strong>. For dropdown questions, add <strong>OPTION_A</strong> through <strong>OPTION_J</strong> and <strong>CORRECT_OPTION</strong>.</p>
   </section>
 
-  <section id="examCreationSection" class="card admin-grid">
+  <section id="examCreationSection" class="card admin-grid" data-management-panel="exams">
     <div>
-      <label for="examTitle">Exam Title</label>
-      <input id="examTitle" type="text" value="Mr. Top's English Class - Vocabulary Examination">
+      <label for="examTitle">Exam Name</label>
+      <input id="examTitle" type="text" readonly aria-readonly="true">
 
       <label for="duration">Exam Duration (minutes)</label>
       <input id="duration" type="number" min="1" value="60">
@@ -54,6 +56,19 @@
       <select id="examType">
         <option value="VOCABULARY">Vocabulary</option>
         <option value="EXPRESSIONS_PROVERBS_IDIOMS">Expressions, Proverbs, and Idioms</option>
+      </select>
+
+      <label for="examSubject">Subject</label>
+      <select id="examSubject"><option value="">Select subject</option></select>
+      <div class="inline-input">
+        <input id="newSubject" type="text" placeholder="Add a new subject">
+        <button id="addSubjectBtn" class="btn secondary small" type="button">Add</button>
+      </div>
+
+      <label for="answerMode">Vocabulary answer mode</label>
+      <select id="answerMode">
+        <option value="typed">Typed answer</option>
+        <option value="spoken">Spoken answer (microphone)</option>
       </select>
 
       <label for="questionOrder">Question Order</label>
@@ -105,12 +120,13 @@
     </div>
   </section>
 
-  <section id="studentDatabaseSection" class="card admin-grid">
+  <section id="studentDatabaseSection" class="card admin-grid legacy-duplicate-panel hidden" data-management-panel="students">
     <div>
       <h2>Student Database</h2>
-      <p>Upload a spreadsheet with <strong>PROGRAM, CLASS, LEVEL, NAME</strong>, and optional <strong>PHOTO</strong> columns.</p>
+      <p>Upload a spreadsheet with <strong>NAME, PROGRAM, CLASS, and LEVEL</strong>. <strong>STUDENT_ID</strong> is optional and only needed if you want a stable student identifier.</p>
       <label for="studentFile">Upload Student Database (.xlsx / .xls)</label>
       <input id="studentFile" type="file" accept=".xlsx,.xls">
+      <button id="loadStudentDatabaseBtn" class="btn primary small" type="button">Load Student Database</button>
       <p class="small-note">PHOTO accepts an image URL or a data URL. Students will select their names from a dropdown.</p>
 
       <div class="button-row">
@@ -127,7 +143,7 @@
     </div>
   </section>
 
-  <section id="classOptionsSection" class="card">
+  <section id="classOptionsSection" class="card legacy-duplicate-panel hidden" data-management-panel="classes">
     <h2>Manage Programs, Classes, and Levels</h2>
     <p class="small-note">Stored options are listed alphabetically. Removing an option does not delete existing exams.</p>
     <div class="managed-lists">
@@ -146,7 +162,7 @@
     </div>
   </section>
 
-  <section id="examLibrarySection" class="card">
+  <section id="examLibrarySection" class="card" data-management-panel="exams">
     <h2>Exam Library</h2>
     <div class="management-filters">
       <label for="examManagementProgram">Program</label>
@@ -164,7 +180,79 @@
     </div>
   </section>
 
-  <section id="studentManagementSection" class="card">
+  <section id="analyticsSection" class="card" data-management-panel="database">
+    <div class="page-heading compact-heading">
+      <h2>Progress &amp; Operations</h2>
+      <p class="small-note">Operational summaries use the existing local roster, results, and configured hierarchy. Missing server-side progress events are shown as unavailable rather than estimated.</p>
+    </div>
+    <div id="analyticsSummary" class="summary-grid"></div>
+    <div class="management-filters analytics-filters">
+      <div class="management-filter-group"><label for="analyticsProgram">Program</label><select id="analyticsProgram"><option value="">All programs</option></select></div>
+      <div class="management-filter-group"><label for="analyticsClass">Class</label><select id="analyticsClass"><option value="">All classes</option></select></div>
+      <div class="management-filter-group"><label for="analyticsLevel">Level</label><select id="analyticsLevel"><option value="">All levels</option></select></div>
+      <div class="management-filter-group"><label for="analyticsStatus">Status</label><select id="analyticsStatus"><option value="">All statuses</option><option value="active">Active</option><option value="inactive">Inactive</option><option value="graduated">Graduated</option><option value="archived">Archived</option></select></div>
+      <div class="management-filter-group"><label for="analyticsSearch">Search</label><input id="analyticsSearch" type="search" placeholder="Name, program, class, level"></div>
+    </div>
+    <div class="analytics-columns">
+      <div>
+        <h3>Student Progress</h3>
+        <div id="studentProgressReport" class="table-scroll"></div>
+      </div>
+      <div>
+        <h3>Level Distribution</h3>
+        <div id="levelDistributionReport" class="table-scroll"></div>
+      </div>
+    </div>
+    <h3>Exam Analytics</h3>
+    <div id="examAnalyticsReport" class="table-scroll"></div>
+  </section>
+
+  <section id="progressStructureSection" class="card" data-management-panel="database">
+    <h2>Progress Structure</h2>
+    <p class="small-note">Configure requirements and achievement targets for each level. These settings remain separate from exam completion.</p>
+    <div class="management-add-grid">
+      <div><label for="newRequirement">New requirement</label><div class="inline-input"><input id="newRequirement"><button id="addRequirementBtn" class="btn secondary small" type="button">Add</button></div></div>
+      <div><label for="newTarget">New achievement target</label><div class="inline-input"><input id="newTarget"><button id="addTargetBtn" class="btn secondary small" type="button">Add</button></div></div>
+    </div>
+    <div class="managed-lists progress-config-lists">
+      <div><h3>Requirements</h3><div id="requirementList" class="management-list"></div></div>
+      <div><h3>Achievement Targets</h3><div id="targetList" class="management-list"></div></div>
+    </div>
+  </section>
+
+  <section id="manualDatabaseSection" class="card" data-management-panel="database">
+    <h2>Manual Database Additions</h2>
+    <p class="small-note">Add students and reusable program, class, and level options without uploading a spreadsheet.</p>
+    <div class="manual-record-grid">
+      <form id="adminManualStudentForm" class="manual-record-form">
+        <h3>Add Student</h3>
+        <label for="adminManualStudentName">Full name</label>
+        <input id="adminManualStudentName" required>
+        <label for="adminManualStudentId">Student ID <span class="small-note">(optional)</span></label>
+        <input id="adminManualStudentId">
+        <label for="adminManualStudentProgram">Program</label>
+        <select id="adminManualStudentProgram"><option value="">Select program</option></select>
+        <label for="adminManualStudentClass">Class</label>
+        <select id="adminManualStudentClass"><option value="">Select class</option></select>
+        <label for="adminManualStudentLevel">Level</label>
+        <select id="adminManualStudentLevel"><option value="">Select level</option></select>
+        <button class="btn primary small" type="submit">Add Student</button>
+        <p id="adminManualStudentStatus" class="small-note" role="status"></p>
+      </form>
+      <div class="manual-record-form">
+        <h3>Add Program, Class, or Level</h3>
+        <label for="adminManualProgram">New program</label>
+        <div class="inline-input"><input id="adminManualProgram"><button id="adminAddProgramBtn" class="btn secondary small" type="button">Add</button></div>
+        <label for="adminManualClass">New class</label>
+        <div class="inline-input"><input id="adminManualClass"><button id="adminAddClassBtn" class="btn secondary small" type="button">Add</button></div>
+        <label for="adminManualLevel">New level</label>
+        <div class="inline-input"><input id="adminManualLevel"><button id="adminAddLevelBtn" class="btn secondary small" type="button">Add</button></div>
+        <p id="adminManualOptionStatus" class="small-note" role="status"></p>
+      </div>
+    </div>
+  </section>
+
+  <section id="studentManagementSection" class="card legacy-duplicate-panel hidden" data-management-panel="students">
     <h2>Manage Students</h2>
     <p class="small-note">Students are sorted alphabetically by name. Remove or edit the roster spreadsheet to make larger changes.</p>
     <div class="management-filters">
@@ -178,12 +266,12 @@
     <div id="studentManagementList" class="student-management-list"></div>
   </section>
 
-  <section id="studentResultsSection" class="card">
+  <section id="studentResultsSection" class="card" data-management-panel="exams">
     <h2>Student Results and Progress</h2>
     <div id="studentResultsTable"><p class="small-note">No student results yet.</p></div>
   </section>
 
-  <section id="examEditorSection" class="card">
+  <section id="examEditorSection" class="card" data-management-panel="exams">
     <h2>Edit Existing Exam</h2>
     <p class="small-note">Load an exam to change its questions, answers, options, program, level, or prerequisite without uploading a new file.</p>
     <label for="editExamSelect">Exam to Edit</label>
@@ -191,10 +279,34 @@
     <button id="loadExamEditorBtn" class="btn secondary">Load Exam Data</button>
     <div id="examEditor" class="exam-editor"></div>
   </section>
-  <section class="card destructive-actions">
-    <h2>Danger Zone</h2>
+  <section class="card settings-box settings-actions" data-management-panel="database">
+    <h2>Settings</h2>
     <button id="loadDemoBtn" class="btn secondary">Load Demo Data</button>
     <button id="clearExamBtn" class="btn danger hidden edit-only-control">Delete All Exams</button>
+    <div id="passwordWorkspaceSection">
+      <h3>Change Admin Password</h3>
+      <form id="changeTutorPasswordForm" class="password-change-form">
+        <label for="currentTutorPassword">Current password</label>
+        <input id="currentTutorPassword" type="password" autocomplete="current-password" required>
+        <label for="newTutorPassword">New password</label>
+        <input id="newTutorPassword" type="password" autocomplete="new-password" minlength="3" required>
+        <label for="confirmTutorPassword">Confirm new password</label>
+        <input id="confirmTutorPassword" type="password" autocomplete="new-password" minlength="3" required>
+        <button class="btn secondary small" type="submit">Change Password</button>
+        <p id="changeTutorPasswordStatus" class="small-note" role="status"></p>
+      </form>
+    </div>
+    <div id="backupSection">
+      <h3>Backup &amp; Restore</h3>
+      <p class="small-note">Backups contain local student, exam, result, progress, configuration, session, and audit data. Passwords and session tokens are never exported.</p>
+      <div class="button-row">
+        <button id="downloadBackupBtn" class="btn secondary" type="button">Download Backup</button>
+        <label class="btn secondary" for="restoreBackupFile">Select Backup</label>
+        <input id="restoreBackupFile" type="file" accept="application/json,.json" class="hidden">
+      </div>
+      <div id="backupValidation" class="small-note" role="status">No backup selected.</div>
+      <button id="restoreBackupBtn" class="btn danger" type="button" disabled>Restore Backup</button>
+    </div>
   </section>
 </main>
 </div>

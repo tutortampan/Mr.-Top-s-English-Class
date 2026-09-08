@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en" translate="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - Mr. Top's English Class</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="container student-dashboard">
+    <header class="student-topbar">
+      <a href="dashboard.html" class="logo">DASHBOARD</a>
+      <nav aria-label="Student navigation">
+        <a class="student-nav-link active" href="dashboard.html">Profile</a>
+        <a class="student-nav-link" href="#dashboardProgressDetails">Progress</a>
+        <a class="student-nav-link" href="#dashboardExamList">Exams</a>
+      </nav>
+      <button id="studentLogoutBtn" class="btn ghost small" type="button">Log Out</button>
+    </header>
+    <section class="card student-dashboard-profile">
+      <div class="student-profile dashboard-profile-card">
+        <img id="dashboardPhoto" class="student-photo hidden" alt="Student photo">
+        <div>
+          <strong id="dashboardName">Student Profile</strong>
+          <span class="student-program-class-level"><span id="dashboardProgram">-</span><span class="class-level-separator"> · </span><span id="dashboardClass">-</span><span class="class-level-separator"> · </span><span id="dashboardLevel">-</span></span>
+          <span id="dashboardAge">Age: -</span>
+          <span class="student-profile-dates"><span id="dashboardDob">Date of birth: -</span><span id="dashboardBirthday">Next birthday: -</span></span>
+        </div>
+        <div id="dashboardProfileResults" class="student-profile-results">
+          <div><span>Overall score</span><strong id="dashboardAverageScore">-</strong></div>
+          <div><span>Grade</span><strong id="dashboardAverageGrade">-</strong></div>
+        </div>
+      </div>
+    </section>
+    <section class="card">
+      <h2>My Progress</h2>
+      <div class="progress-summary"><strong id="dashboardProgressPercent">0%</strong><span>Overall progress</span></div>
+      <div class="dashboard-progress-bar"><span id="dashboardProgressBar"></span></div>
+      <div class="progress-status-grid">
+        <div><span>Current level</span><strong id="dashboardCurrentLevel">-</strong></div>
+        <div><span>Next level</span><strong id="dashboardNextLevel">-</strong></div>
+        <div><span>Eligibility</span><strong id="dashboardEligibility">In progress</strong></div>
+      </div>
+      <p id="dashboardProgressNote" class="small-note"></p>
+      <div id="dashboardProgressDetails"></div>
+    </section>
+    <section class="card">
+      <h2>Exams</h2>
+      <div id="dashboardExamList" class="dashboard-exam-list"></div>
+    </section>
+    <section class="card dashboard-edit-profile">
+      <h2>Edit Profile</h2>
+      <label for="dashboardPhotoInput">Change photo</label>
+      <input id="dashboardPhotoInput" type="file" accept="image/*">
+      <p id="dashboardPhotoStatus" class="small-note" role="status"></p>
+      <details>
+        <summary>Change password</summary>
+        <form id="studentChangePasswordForm" class="student-login-form">
+          <label for="studentCurrentPassword">Current password</label>
+          <input id="studentCurrentPassword" type="password" autocomplete="current-password" required>
+          <label for="studentNewPassword">New password</label>
+          <input id="studentNewPassword" type="password" minlength="3" autocomplete="new-password" required>
+          <label for="studentConfirmPassword">Confirm new password</label>
+          <input id="studentConfirmPassword" type="password" minlength="3" autocomplete="new-password" required>
+          <button class="btn secondary" type="submit">Change Password</button>
+          <p id="studentPasswordStatus" class="small-note" role="status"></p>
+        </form>
+      </details>
+    </section>
+  </main>
+  <script src="cloud-storage.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

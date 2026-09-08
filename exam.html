@@ -12,28 +12,22 @@
 <div id="startScreen" class="center-screen">
   <section class="card start-card">
     <div class="brand">MR. TOP'S ENGLISH CLASS</div>
-    <div id="studentProfileResults" class="student-profile-results hidden">
-      <div><span>Overall score</span><strong id="studentProfileAverageScore">-</strong></div>
-      <div><span>Grade</span><strong id="studentProfileAverageGrade">-</strong></div>
-    </div>
-    <label for="studentName">Choose Your Name</label>
-    <select id="studentName">
-      <option value="">Loading student database...</option>
-    </select>
     <div id="studentProfile" class="student-profile hidden">
-      <img id="studentPhoto" class="student-photo" alt="">
-      <div>
+      <img id="studentPhoto" class="student-photo" alt="Student profile photo">
+      <div class="student-profile-info">
         <strong id="studentProfileName"></strong>
         <span class="student-program-class-level"><span id="studentProfileProgram"></span><span class="class-level-separator"> · </span><span id="studentProfileClass"></span><span class="class-level-separator"> · </span><span id="studentProfileLevel"></span></span>
         <span id="studentProfileAge"></span>
         <span class="student-profile-dates"><span id="studentProfileDob"></span><span id="studentProfileBirthday"></span></span>
       </div>
+      <div id="studentProfileResults" class="student-profile-results hidden">
+        <div><span>Overall score</span><strong id="studentProfileAverageScore">-</strong></div>
+        <div><span>Grade</span><strong id="studentProfileAverageGrade">-</strong></div>
+      </div>
     </div>
-    <label for="examSelect">Choose Exam</label>
-    <select id="examSelect"><option value="">Loading exams...</option></select>
     <h1 id="startTitle">Vocabulary Examination</h1>
-    <p id="startDescription">Choose an exam and enter your name before starting.</p>
-    <p class="exam-rule-note">Leaving this page or window submits the exam automatically.</p>
+    <p id="startDescription">Your exam is ready. Review the profile and start when you are prepared.</p>
+    <p class="exam-rule-note">Do not leave during an active exam. Your session and answers are saved for recovery.</p>
     <div id="studentDobField" class="hidden">
       <label for="studentDob">Date of Birth</label>
       <input id="studentDob" type="date" autocomplete="bday">
@@ -50,13 +44,17 @@
     </div>
     <div id="studentPhotoCapture" class="student-photo-capture hidden">
       <video id="studentCameraPreview" class="student-camera-preview" autoplay playsinline muted></video>
+      <img id="studentPhotoPreview" class="student-camera-preview hidden" alt="Captured exam photo preview">
       <div id="studentCameraFlash" class="student-camera-flash"></div>
-      <p id="studentPhotoStatus" class="small-note">Preparing the camera...</p>
+      <p id="studentPhotoStatus" class="small-note">Position your face inside the frame.</p>
+      <div class="button-row centered">
+        <button id="takeStudentPhotoBtn" class="btn secondary small" type="button">Take Photo</button>
+        <button id="useStudentPhotoBtn" class="btn primary small hidden" type="button">Use This Photo</button>
+        <button id="retakeStudentPhotoBtn" class="btn secondary small hidden" type="button">Retake Photo</button>
+      </div>
     </div>
-    <div id="studentProgress" class="student-progress"></div>
-    <div id="studentHistory" class="student-history"></div>
     <button id="startExamBtn" class="btn primary full">Start Exam</button>
-    <a href="index.html" class="back-link">← Back to Home</a>
+    <a href="dashboard.html" class="back-link">← Back to Progress</a>
   </section>
 </div>
 
@@ -118,7 +116,7 @@
   <section class="card start-card">
     <h1>No Exam Available</h1>
     <p>The administrator has not created an exam in this browser yet.</p>
-    <a class="btn primary" href="index.html">Return to Home</a>
+    <a class="btn primary" href="dashboard.html">Return to Progress</a>
   </section>
 </div>
 
