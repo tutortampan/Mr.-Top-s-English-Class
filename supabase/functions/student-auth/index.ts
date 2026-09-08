@@ -123,60 +123,35 @@ Deno.serve(async request => {
     const action = body.action || "login";
     let account = (await admin.from("student_accounts").select("*").eq("student_id", student.id).maybeSingle()).data;
 
-    if (action === "login" && (!account || account.password_not_set)) {
-      const initialPassword = "123";
+    let loginPassword = "";
+    if (action === "login") {
+      loginPassword = crypto.randomUUID();
       let userId = account?.user_id;
       if (!userId) {
-        const created = await admin.auth.admin.createUser({email, password: initialPassword, email_confirm: true});
+        const created = await admin.auth.admin.createUser({email, password: loginPassword, email_confirm: true});
         if (created.error) throw created.error;
         userId = created.data.user.id;
       } else {
-        const updated = await admin.auth.admin.updateUserById(userId, {password: initialPassword});
+        const updated = await admin.auth.admin.updateUserById(userId, {password: loginPassword});
         if (updated.error) throw updated.error;
       }
       const saved = await admin.from("student_accounts").upsert({
         student_id: student.id,
         user_id: userId,
         auth_email: email,
-        password_not_set: false,
+        password_not_set: true,
         password_created_at: account?.password_created_at || new Date().toISOString(),
         password_updated_at: new Date().toISOString()
       });
       if (saved.error) throw saved.error;
-      account = {user_id: userId, auth_email: email, password_not_set: false};
+      account = {user_id: userId, auth_email: email, password_not_set: true};
     }
 
-    if (action === "setup") {
-      if (account && !account.password_not_set) throw new Error("This account already has a password.");
-      if (String(body.password || "").length < 3) throw new Error("Password must contain at least 3 characters.");
-      let userId = account?.user_id;
-      if (!userId) {
-        const created = await admin.auth.admin.createUser({email, password: body.password, email_confirm: true});
-        if (created.error) throw created.error;
-        userId = created.data.user.id;
-      } else {
-        const updated = await admin.auth.admin.updateUserById(userId, {password: body.password});
-        if (updated.error) throw updated.error;
-      }
-      const saved = await admin.from("student_accounts").upsert({
-        student_id: student.id,
-        user_id: userId,
-        auth_email: email,
-        password_not_set: false,
-        password_created_at: new Date().toISOString(),
-        password_updated_at: new Date().toISOString()
-      });
-      if (saved.error) throw saved.error;
-    }
-
-    if (action === "login" || action === "setup") {
-      if (action === "login" && (!account || account.password_not_set)) {
-        return response(request, {first_login: true, profile: student});
-      }
+    if (action === "login") {
       const signedIn = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
         method: "POST",
         headers: {"apikey": Deno.env.get("SUPABASE_ANON_KEY")!, "Content-Type": "application/json"},
-        body: JSON.stringify({email, password: body.password})
+        body: JSON.stringify({email, password: loginPassword})
       });
       const session = await signedIn.json();
       if (!signedIn.ok) return response(request, {error: "Incorrect password."}, 401);

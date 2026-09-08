@@ -1,6 +1,7 @@
 (() => {
   const SUPABASE_URL = "https://xuiszvwfjccvucqpactf.supabase.co";
   const SUPABASE_ANON_KEY = "******";
+  const USE_LOCAL_MODE = !SUPABASE_ANON_KEY || SUPABASE_ANON_KEY === "******";
   const TABLE = "cec_app_state";
   const originalSetItem = localStorage.setItem.bind(localStorage);
   const originalRemoveItem = localStorage.removeItem.bind(localStorage);
@@ -37,6 +38,7 @@
   };
 
   window.cecStudentAuth = async function studentAuth(payload) {
+    if (USE_LOCAL_MODE) return localStudentAuth(payload);
     const response = await fetch(`${SUPABASE_URL}/functions/v1/student-auth`, {
       method: "POST",
       headers: {"Content-Type": "application/json", apikey: SUPABASE_ANON_KEY},
@@ -79,13 +81,6 @@
     if (students.length !== 1) throw new Error("Student account could not be identified.");
     const student = students[0];
     const key = String(student.studentId || student.name).trim().toLowerCase();
-    const passwordKey = `cec_student_password_${key}`;
-    const storedHash = localStorage.getItem(passwordKey) || await hashLocalPassword("123");
-    if (payload.action === "login" || payload.action === "setup") {
-      if (await hashLocalPassword(payload.password || "") !== storedHash) {
-        throw new Error("Incorrect password.");
-      }
-    }
     const profile = {
       id: key,
       student_id: student.studentId || key,
@@ -173,6 +168,7 @@
   }
 
   function schedulePush() {
+    if (USE_LOCAL_MODE) return;
     clearTimeout(pushTimer);
     pushTimer = setTimeout(() => {
       push().catch(error => console.warn("Cloud synchronization unavailable:", error.message));
@@ -189,6 +185,7 @@
   };
 
   window.cecCloudReady = (async () => {
+    if (USE_LOCAL_MODE) return;
     try {
       const rows = await request(`${TABLE}?id=eq.1&select=payload`);
       const remote = rows[0] && rows[0].payload;

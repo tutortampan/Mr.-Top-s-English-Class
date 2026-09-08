@@ -961,8 +961,6 @@ function initLanding() {
     fields.className.addEventListener("change", () => {
       populate(fields.name, values("name", {program: fields.program.value, className: fields.className.value}), "Select your name");
     });
-    const rememberCheckbox = document.getElementById("rememberDevice");
-
     if (!sessionStorage.getItem("cec_student_session") && restoreRememberedStudentSession()) {
       window.location.href = "dashboard.html";
       return;
@@ -976,51 +974,13 @@ function initLanding() {
           action: "login",
           program: fields.program.value,
           class_name: fields.className.value,
-          full_name: fields.name.value,
-          password: document.getElementById("loginPassword").value
-        });
-        if (result.first_login) {
-          studentLoginForm.classList.add("hidden");
-          const setupForm = document.getElementById("studentSetupForm");
-          ["program", "className", "name"].forEach(field => {
-            document.getElementById(`setup${field === "className" ? "Class" : field.charAt(0).toUpperCase() + field.slice(1)}`).value = fields[field].value;
-          });
-          setupForm.classList.remove("hidden");
-          return;
-        }
-
-        setRememberedStudentSession(
-          JSON.parse(sessionStorage.getItem("cec_student_session") || "null"),
-          JSON.parse(sessionStorage.getItem("cec_student_profile") || "null"),
-          JSON.parse(sessionStorage.getItem("cec_student_progress") || "null"),
-          Boolean(rememberCheckbox && rememberCheckbox.checked)
-        );
-        window.location.href = "dashboard.html";
-      } catch (error) {
-        status.textContent = error.message;
-      }
-    });
-    document.getElementById("studentSetupForm").addEventListener("submit", async event => {
-      event.preventDefault();
-      const status = document.getElementById("studentSetupStatus");
-      const password = document.getElementById("setupPassword").value;
-      if (password !== document.getElementById("setupPasswordConfirm").value) {
-        status.textContent = "The passwords do not match.";
-        return;
-      }
-      try {
-        const result = await window.cecStudentAuth({
-          action: "setup",
-          program: document.getElementById("setupProgram").value,
-          class_name: document.getElementById("setupClass").value,
-          full_name: document.getElementById("setupName").value,
-          password
+          full_name: fields.name.value
         });
         setRememberedStudentSession(
           JSON.parse(sessionStorage.getItem("cec_student_session") || "null"),
           JSON.parse(sessionStorage.getItem("cec_student_profile") || "null"),
           JSON.parse(sessionStorage.getItem("cec_student_progress") || "null"),
-          Boolean(rememberCheckbox && rememberCheckbox.checked)
+          true
         );
         window.location.href = "dashboard.html";
       } catch (error) {
@@ -1105,8 +1065,8 @@ async function initDashboard() {
   const averageGrade = averageScore === null ? "" : getGrade(averageScore);
   document.getElementById("dashboardAverageScore").textContent = averageScore === null ? "-" : `${averageScore.toFixed(1)}%`;
   document.getElementById("dashboardAverageGrade").textContent = averageGrade || "-";
-  document.getElementById("dashboardAverageScore").className = averageGrade ? `grade-${averageGrade}` : "";
-  document.getElementById("dashboardAverageGrade").className = averageGrade ? `grade-${averageGrade}` : "";
+  document.getElementById("dashboardAverageScore").className = averageGrade ? `grade-${averageGrade} score-value` : "score-value";
+  document.getElementById("dashboardAverageGrade").className = averageGrade ? `grade-${averageGrade} grade-value` : "grade-value";
   document.getElementById("dashboardCurrentLevel").textContent = profile.current_level || "Not configured";
   const progress = JSON.parse(sessionStorage.getItem("cec_student_progress") || "null");
   if (progress) {
@@ -1153,21 +1113,33 @@ async function initDashboard() {
     photo.src = safePhotoUrl(profile.photo_url);
     photo.classList.remove("hidden");
   }
-  document.getElementById("dashboardPhotoInput").addEventListener("change", event => {
+  document.getElementById("dashboardPhotoInput").addEventListener("change", async event => {
     const file = event.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const updated = {...profile, photo_url: String(reader.result)};
+    try {
+      const photoUrl = await resizePhotoToSquare(file, 320);
+      const updated = {...profile, photo_url: photoUrl};
       sessionStorage.setItem("cec_student_profile", JSON.stringify(updated));
-      document.getElementById("dashboardPhoto").src = updated.photo_url;
+      const remembered = readRememberedStudentSession();
+      if (remembered) {
+        remembered.profile = updated;
+        localStorage.setItem(STORAGE_REMEMBERED_STUDENT, JSON.stringify(remembered));
+      }
+      const students = readStoredArray(STORAGE_STUDENTS);
+      const matchingStudent = students.find(student =>
+        String(student.studentId || "").trim() === String(profile.student_id || "").trim() ||
+        String(student.name || "").trim().toLowerCase() === String(profile.full_name || "").trim().toLowerCase()
+      );
+      if (matchingStudent) {
+        matchingStudent.photo = photoUrl;
+        localStorage.setItem(STORAGE_STUDENTS, JSON.stringify(students));
+      }
+      document.getElementById("dashboardPhoto").src = photoUrl;
       document.getElementById("dashboardPhoto").classList.remove("hidden");
       document.getElementById("dashboardPhotoStatus").textContent = "Profile photo updated.";
-    };
-    reader.onerror = () => {
+    } catch (error) {
       document.getElementById("dashboardPhotoStatus").textContent = "The photo could not be loaded.";
-    };
-    reader.readAsDataURL(file);
+    }
   });
   document.getElementById("studentLogoutBtn").addEventListener("click", () => {
     sessionStorage.removeItem("cec_student_session");
@@ -1175,22 +1147,6 @@ async function initDashboard() {
     sessionStorage.removeItem("cec_student_progress");
     localStorage.removeItem(STORAGE_REMEMBERED_STUDENT);
     window.location.href = "index.html";
-  });
-  document.getElementById("studentChangePasswordForm").addEventListener("submit", async event => {
-    event.preventDefault();
-    const status = document.getElementById("studentPasswordStatus");
-    const newPassword = document.getElementById("studentNewPassword").value;
-    if (newPassword !== document.getElementById("studentConfirmPassword").value) {
-      status.textContent = "The new passwords do not match.";
-      return;
-    }
-    try {
-      await window.cecStudentChangePassword(document.getElementById("studentCurrentPassword").value, newPassword);
-      status.textContent = "Password changed successfully.";
-      document.getElementById("studentChangePasswordForm").reset();
-    } catch (error) {
-      status.textContent = error.message;
-    }
   });
 }
 
@@ -1243,6 +1199,34 @@ function escapeHtml(value) {
 function safePhotoUrl(value) {
   const photo = String(value ?? "").trim();
   return /^(https?:\/\/|data:image\/)/i.test(photo) ? photo : "";
+}
+
+function resizePhotoToSquare(file, size) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("The photo could not be loaded."));
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = () => reject(new Error("The photo could not be decoded."));
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const context = canvas.getContext("2d");
+        if (!context) {
+          reject(new Error("Photo processing is unavailable."));
+          return;
+        }
+        const scale = Math.max(size / image.width, size / image.height);
+        const width = image.width * scale;
+        const height = image.height * scale;
+        context.drawImage(image, (size - width) / 2, (size - height) / 2, width, height);
+        resolve(canvas.toDataURL("image/jpeg", 0.9));
+      };
+      image.src = String(reader.result || "");
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function normalizeQuestionType(value) {
@@ -2263,6 +2247,14 @@ function initExam() {
   } catch (error) {
     students = [];
   }
+  const authenticatedStudent = students.find(student =>
+    String(student.studentId || "").trim() === String(authenticatedProfile.student_id || "").trim() ||
+    String(student.name || "").trim().toLowerCase() === String(authenticatedProfile.full_name || "").trim().toLowerCase()
+  );
+  if (authenticatedStudent && authenticatedProfile.photo_url) {
+    authenticatedStudent.photo = authenticatedProfile.photo_url;
+    localStorage.setItem(STORAGE_STUDENTS, JSON.stringify(students));
+  }
 
   function matchesStudent(examItem, student) {
     if (!student) return false;
@@ -2397,7 +2389,10 @@ function initExam() {
     studentGender.value = student.gender || "";
     studentGender.required = !student.gender;
     studentGenderField.classList.toggle("hidden", Boolean(student.gender));
-    const photo = safePhotoUrl(photoOverrides[student.name] || student.photo);
+    const isAuthenticatedStudent = authenticatedStudent === student;
+    const photo = safePhotoUrl(isAuthenticatedStudent
+      ? authenticatedProfile.photo_url || student.photo
+      : photoOverrides[student.name] || student.photo);
     acceptedEntryPhoto = photo || "";
     if (photo) {
       studentPhoto.src = photo;
@@ -2449,7 +2444,9 @@ function initExam() {
 
   async function captureStudentPhoto() {
     const student = students[Number(studentSelect.value)];
-    if (!student || safePhotoUrl(photoOverrides[student.name] || student.photo)) return;
+    if (!student || safePhotoUrl(authenticatedStudent === student
+      ? authenticatedProfile.photo_url || student.photo
+      : photoOverrides[student.name] || student.photo)) return;
     const token = cameraCaptureToken;
     studentPhotoCapture.classList.remove("hidden");
     studentPhotoStatus.textContent = "Center your face inside the frame, then press Take Photo.";
@@ -2639,7 +2636,9 @@ function initExam() {
     state.studentProgram = student.program || "";
     state.studentLevel = student.level || "";
     state.studentDateOfBirth = dateOfBirth;
-    state.studentPhoto = acceptedEntryPhoto || safePhotoUrl(photoOverrides[student.name] || student.photo) || "";
+    state.studentPhoto = acceptedEntryPhoto || safePhotoUrl(authenticatedStudent === student
+      ? authenticatedProfile.photo_url || student.photo
+      : photoOverrides[student.name] || student.photo) || "";
     activeQuestions = exam.randomizeQuestions ? [...exam.questions].sort(() => Math.random() - 0.5) : exam.questions;
     state.answers = Array(activeQuestions.length).fill("");
     state.examDate = new Intl.DateTimeFormat("en-US", {
@@ -2966,7 +2965,7 @@ function initResult() {
     <p>Exam date: <strong>${escapeHtml(result.examDate || "-")}</strong></p>
     <div class="result-visuals">
       ${result.studentPhoto ? `<img class="result-photo" src="${escapeHtml(safePhotoUrl(result.studentPhoto))}" alt="">` : ""}
-      <div class="score-circle">${result.score}%</div>
+      <div class="score-circle grade-${result.grade || getGrade(result.score)}">${result.score}%</div>
     </div>
     <div class="result-grade grade-${result.grade || getGrade(result.score)}">Grade ${escapeHtml(result.grade || getGrade(result.score))}</div>
     <p class="score-breakdown"><strong>${result.points ?? result.correct}</strong> / ${result.total} points</p>
@@ -2994,7 +2993,7 @@ function initResult() {
       .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
     resultHistory.innerHTML = history.map(item => `
       <div class="history-row"><span>${escapeHtml(item.examTitle)}<small>${escapeHtml(item.examDate || "")}</small></span>
-      <strong>${escapeHtml(item.score)}%</strong></div>`).join("");
+      <strong class="grade-${item.grade || getGrade(item.score)}">${escapeHtml(item.score)}%</strong></div>`).join("");
   }
 }
 
