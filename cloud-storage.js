@@ -1,6 +1,6 @@
 (() => {
   const SUPABASE_URL = "https://xuiszvwfjccvucqpactf.supabase.co";
-  const SUPABASE_ANON_KEY = "******";
+  const SUPABASE_ANON_KEY = "sb_publishable_dvMkwNJpPlryF0KNiaJRfQ_-fR1WW_4";
   const USE_LOCAL_MODE = !SUPABASE_ANON_KEY || SUPABASE_ANON_KEY === "******";
   const TABLE = "cec_app_state";
   const originalSetItem = localStorage.setItem.bind(localStorage);
