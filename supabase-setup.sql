@@ -1,722 +1,430 @@
-create table if not exists public.cec_app_state (
-  id integer primary key check (id = 1),
-  payload jsonb not null default '{}'::jsonb,
-  updated_at timestamptz not null default now()
+-- ============================================================
+-- TOP ENGLISH CLASS — Supabase PostgreSQL Schema (Clean Setup)
+-- Run this in Supabase SQL Editor
+-- ============================================================
+
+-- Enable UUID extension
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- ============================================================
+-- 0. CLEAN RESET (Drops previous partial / conflicting tables)
+-- ============================================================
+DROP TABLE IF EXISTS audit_logs CASCADE;
+DROP TABLE IF EXISTS site_settings CASCADE;
+DROP TABLE IF EXISTS progress CASCADE;
+DROP TABLE IF EXISTS attempt_answers CASCADE;
+DROP TABLE IF EXISTS attempts CASCADE;
+DROP TABLE IF EXISTS questions CASCADE;
+DROP TABLE IF EXISTS exam_classes CASCADE;
+DROP TABLE IF EXISTS exams CASCADE;
+DROP TABLE IF EXISTS students CASCADE;
+DROP TABLE IF EXISTS batches CASCADE;
+DROP TABLE IF EXISTS class_subjects CASCADE;
+DROP TABLE IF EXISTS levels CASCADE;
+DROP TABLE IF EXISTS subjects CASCADE;
+DROP TABLE IF EXISTS classes CASCADE;
+DROP TABLE IF EXISTS programs CASCADE;
+
+-- ============================================================
+-- 1. CORE TABLES
+-- ============================================================
+
+-- PROGRAMS
+CREATE TABLE programs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ
 );
 
-alter table public.cec_app_state enable row level security;
-
-drop policy if exists "Allow public app state read" on public.cec_app_state;
-create policy "Allow public app state read"
-  on public.cec_app_state for select
-  to anon, authenticated
-  using (true);
-
-drop policy if exists "Allow public app state write" on public.cec_app_state;
-create policy "Allow public app state write"
-  on public.cec_app_state for insert
-  to anon, authenticated
-  with check (id = 1);
-
-drop policy if exists "Allow public app state update" on public.cec_app_state;
-create policy "Allow public app state update"
-  on public.cec_app_state for update
-  to anon, authenticated
-  using (id = 1)
-  with check (id = 1);
-
-grant select, insert, update on public.cec_app_state to anon, authenticated;
-
--- Phase 1 master data. These tables are authoritative when the app is
--- connected to Supabase; localStorage remains an offline compatibility cache.
-create table if not exists public.students (
-  id uuid primary key default gen_random_uuid(),
-  student_id text not null unique check (length(trim(student_id)) > 0),
-  full_name text not null check (length(trim(full_name)) > 0),
-  date_of_birth date,
-  gender text check (gender is null or lower(gender) in ('male', 'female', 'other')),
-  photo_url text,
-  program text,
-  class_name text,
-  current_level text,
-  status text not null default 'active' check (status in ('active', 'inactive', 'graduated', 'archived')),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+-- CLASSES
+CREATE TABLE classes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  program_id UUID NOT NULL REFERENCES programs(id),
+  name TEXT NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ
 );
 
-create index if not exists students_full_name_dob_idx
-  on public.students (lower(full_name), date_of_birth);
-
-create table if not exists public.student_accounts (
-  student_id uuid primary key references public.students(id) on delete cascade,
-  user_id uuid not null unique references auth.users(id) on delete cascade,
-  auth_email text not null unique,
-  account_status text not null default 'active' check (account_status in ('active', 'disabled')),
-  password_not_set boolean not null default true,
-  password_created_at timestamptz,
-  password_updated_at timestamptz,
-  created_at timestamptz not null default now(),
-  last_login_at timestamptz
+-- SUBJECTS
+CREATE TABLE subjects (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  program_id UUID NOT NULL REFERENCES programs(id),
+  name TEXT NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ
 );
 
-alter table public.student_accounts
-  add column if not exists auth_email text;
-
-create table if not exists public.scholarships (
-  id uuid primary key default gen_random_uuid(),
-  student_id uuid not null references public.students(id) on delete cascade,
-  scholarship_name text not null check (length(trim(scholarship_name)) > 0),
-  status text not null default 'active' check (status in ('active', 'inactive', 'completed')),
-  starts_on date,
-  ends_on date,
-  details jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+-- LEVELS
+CREATE TABLE levels (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  subject_id UUID NOT NULL REFERENCES subjects(id),
+  class_id UUID REFERENCES classes(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  level_number INT NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ,
+  UNIQUE (subject_id, level_number)
 );
 
-create table if not exists public.student_progress (
-  student_id uuid primary key references public.students(id) on delete cascade,
-  progress_percent numeric(5,2) not null default 0 check (progress_percent between 0 and 100),
-  completed_requirements integer not null default 0 check (completed_requirements >= 0),
-  total_requirements integer not null default 0 check (total_requirements >= 0),
-  completed_targets integer not null default 0 check (completed_targets >= 0),
-  total_targets integer not null default 0 check (total_targets >= 0),
-  next_level text,
-  next_level_eligible boolean not null default false,
-  updated_at timestamptz not null default now()
+-- CLASS_SUBJECTS (Many-to-Many: Class <-> Subject)
+CREATE TABLE class_subjects (
+  class_id UUID NOT NULL REFERENCES classes(id),
+  subject_id UUID NOT NULL REFERENCES subjects(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (class_id, subject_id)
 );
 
-create index if not exists scholarships_student_id_idx on public.scholarships(student_id);
-
-create table if not exists public.programs (
-  id uuid primary key default gen_random_uuid(),
-  name text not null unique check (length(trim(name)) > 0),
-  description text,
-  status text not null default 'active' check (status in ('active', 'inactive', 'archived')),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+-- BATCHES (Hierarchy: Program -> Class -> Batch)
+CREATE TABLE batches (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ
 );
 
-create table if not exists public.subjects (
-  id uuid primary key default gen_random_uuid(),
-  name text not null unique,
-  active boolean not null default true,
-  created_at timestamptz not null default now(),
-  constraint subjects_name_not_blank check (length(trim(name)) > 0),
-  constraint subjects_name_no_separators check (name !~ '[-_]')
+-- STUDENTS
+CREATE TABLE students (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  program_id UUID NOT NULL REFERENCES programs(id),
+  class_id UUID NOT NULL REFERENCES classes(id),
+  batch_id UUID REFERENCES batches(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  gender TEXT CHECK (gender IN ('male', 'female')),
+  birth_date DATE,
+  pin_hash TEXT NOT NULL,
+  photo_url TEXT,
+  photo_status TEXT NOT NULL DEFAULT 'not_set' CHECK (photo_status IN ('not_set', 'pending', 'set')),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ
 );
 
-insert into public.subjects (name)
-values ('Vocabulary'), ('Expressions'), ('Proverbs'), ('Idioms')
-on conflict (name) do nothing;
-
-alter table public.subjects enable row level security;
-drop policy if exists "subjects_read_authenticated" on public.subjects;
-create policy "subjects_read_authenticated" on public.subjects for select to authenticated using (active);
-drop policy if exists "subjects_manage_tutor" on public.subjects;
-create policy "subjects_manage_tutor" on public.subjects for all to authenticated
-  using ((auth.jwt()->'app_metadata'->>'role') = 'tutor')
-  with check ((auth.jwt()->'app_metadata'->>'role') = 'tutor');
-
-create table if not exists public.classes (
-  id uuid primary key default gen_random_uuid(),
-  program_id uuid not null references public.programs(id) on delete restrict,
-  name text not null check (length(trim(name)) > 0),
-  description text,
-  status text not null default 'active' check (status in ('active', 'inactive', 'archived')),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique(program_id, name)
+-- EXAMS
+CREATE TABLE exams (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  program_id UUID NOT NULL REFERENCES programs(id),
+  class_id UUID REFERENCES classes(id) ON DELETE SET NULL,
+  subject_id UUID NOT NULL REFERENCES subjects(id),
+  level_id UUID NOT NULL REFERENCES levels(id),
+  prerequisite_exam_id UUID REFERENCES exams(id) ON DELETE SET NULL,
+  exam_type TEXT NOT NULL CHECK (exam_type IN ('Daily', 'Weekly', 'Monthly', 'Final')),
+  exam_order TEXT NOT NULL DEFAULT '1',
+  exam_title TEXT NOT NULL,
+  display_name TEXT GENERATED ALWAYS AS (exam_type || ' — ' || exam_title) STORED,
+  answer_type TEXT NOT NULL CHECK (answer_type IN ('speech_to_text', 'dropdown', 'multiple_choice', 'written')),
+  exam_status TEXT NOT NULL DEFAULT 'published' CHECK (exam_status IN ('draft', 'published', 'unpublished', 'archived')),
+  question_order TEXT NOT NULL DEFAULT 'sequential' CHECK (question_order IN ('sequential', 'random')),
+  time_limit_minutes INT NOT NULL DEFAULT 60,
+  minimum_required_score NUMERIC(5,2) NOT NULL DEFAULT 60.0,
+  retake_allowed BOOLEAN NOT NULL DEFAULT TRUE,
+  max_attempts INT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ
 );
 
-create table if not exists public.levels (
-  id uuid primary key default gen_random_uuid(),
-  class_id uuid not null references public.classes(id) on delete restrict,
-  name text not null check (length(trim(name)) > 0),
-  level_order integer not null check (level_order >= 0),
-  description text,
-  advancement_threshold numeric(5,2) not null default 100 check (advancement_threshold between 0 and 100),
-  status text not null default 'active' check (status in ('active', 'inactive', 'archived')),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique(class_id, name),
-  unique(class_id, level_order)
+-- Idempotent migrations for existing installations:
+ALTER TABLE exams ADD COLUMN IF NOT EXISTS class_id UUID REFERENCES classes(id) ON DELETE SET NULL;
+ALTER TABLE exams ADD COLUMN IF NOT EXISTS prerequisite_exam_id UUID REFERENCES exams(id) ON DELETE SET NULL;
+ALTER TABLE exams ADD COLUMN IF NOT EXISTS exam_order TEXT DEFAULT '1';
+
+-- EXAM_CLASSES (Many-to-Many: Exam <-> Class)
+CREATE TABLE exam_classes (
+  exam_id UUID NOT NULL REFERENCES exams(id),
+  class_id UUID NOT NULL REFERENCES classes(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (exam_id, class_id)
 );
 
-alter table public.levels
-  add column if not exists advancement_threshold numeric(5,2) not null default 100;
-
-create table if not exists public.requirements (
-  id uuid primary key default gen_random_uuid(),
-  level_id uuid not null references public.levels(id) on delete restrict,
-  name text not null check (length(trim(name)) > 0),
-  description text,
-  mandatory boolean not null default false,
-  requirement_type text not null default 'custom',
-  completion_criteria jsonb not null default '{}'::jsonb,
-  display_order integer not null default 0,
-  status text not null default 'active' check (status in ('active', 'inactive', 'archived')),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+-- QUESTIONS
+CREATE TABLE questions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  exam_id UUID NOT NULL REFERENCES exams(id),
+  question_order INT NOT NULL,
+  question_text TEXT NOT NULL,
+  answer_type TEXT NOT NULL CHECK (answer_type IN ('speech_to_text', 'dropdown', 'multiple_choice', 'written')),
+  options_json JSONB,
+  correct_answer TEXT NOT NULL,
+  metadata JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ,
+  UNIQUE (exam_id, question_order)
 );
 
-create table if not exists public.achievement_targets (
-  id uuid primary key default gen_random_uuid(),
-  level_id uuid not null references public.levels(id) on delete restrict,
-  name text not null check (length(trim(name)) > 0),
-  description text,
-  mandatory boolean not null default false,
-  completion_criteria jsonb not null default '{}'::jsonb,
-  display_order integer not null default 0,
-  status text not null default 'active' check (status in ('active', 'inactive', 'archived')),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+-- ATTEMPTS
+CREATE TABLE attempts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id UUID NOT NULL REFERENCES students(id),
+  exam_id UUID NOT NULL REFERENCES exams(id),
+  started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expected_end_at TIMESTAMPTZ NOT NULL,
+  submitted_at TIMESTAMPTZ,
+  status TEXT NOT NULL DEFAULT 'in_progress' CHECK (status IN ('not_started','in_progress','submitted','auto_submitted','expired','cancelled')),
+  score NUMERIC(5,2),
+  percentage NUMERIC(5,2),
+  grade TEXT,
+  effective_score NUMERIC(5,2),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create table if not exists public.requirement_targets (
-  requirement_id uuid not null references public.requirements(id) on delete cascade,
-  target_id uuid not null references public.achievement_targets(id) on delete cascade,
-  primary key(requirement_id, target_id)
+-- ATTEMPT_ANSWERS
+CREATE TABLE attempt_answers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  attempt_id UUID NOT NULL REFERENCES attempts(id),
+  question_id UUID REFERENCES questions(id),
+  question_snapshot JSONB NOT NULL,
+  options_snapshot JSONB,
+  correct_answer_snapshot TEXT NOT NULL,
+  student_answer TEXT,
+  evaluation_result TEXT CHECK (evaluation_result IN ('correct','minor_spelling_error','incorrect',NULL)),
+  score NUMERIC(5,2),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create table if not exists public.student_requirement_progress (
-  student_id uuid not null references public.students(id) on delete cascade,
-  requirement_id uuid not null references public.requirements(id) on delete cascade,
-  completed boolean not null default false,
-  evidence jsonb not null default '{}'::jsonb,
-  updated_at timestamptz not null default now(),
-  primary key(student_id, requirement_id)
+-- PROGRESS
+CREATE TABLE progress (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id UUID NOT NULL REFERENCES students(id),
+  subject_id UUID NOT NULL REFERENCES subjects(id),
+  level_id UUID NOT NULL REFERENCES levels(id),
+  is_unlocked BOOLEAN NOT NULL DEFAULT FALSE,
+  is_completed BOOLEAN NOT NULL DEFAULT FALSE,
+  unlocked_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (student_id, subject_id, level_id)
 );
 
-create table if not exists public.student_target_progress (
-  student_id uuid not null references public.students(id) on delete cascade,
-  target_id uuid not null references public.achievement_targets(id) on delete cascade,
-  completed boolean not null default false,
-  evidence jsonb not null default '{}'::jsonb,
-  updated_at timestamptz not null default now(),
-  primary key(student_id, target_id)
+-- SITE_SETTINGS
+CREATE TABLE site_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create table if not exists public.progression_history (
-  id uuid primary key default gen_random_uuid(),
-  student_id uuid not null references public.students(id) on delete cascade,
-  previous_level_id uuid references public.levels(id),
-  new_level_id uuid not null references public.levels(id),
-  program text,
-  class_name text,
-  reason text not null,
-  trigger_event text not null,
-  evidence jsonb not null default '{}'::jsonb,
-  progress_percent numeric(5,2) not null check (progress_percent between 0 and 100),
-  requirement_status jsonb not null default '{}'::jsonb,
-  actor_user_id uuid references auth.users(id),
-  created_at timestamptz not null default now(),
-  unique(student_id, previous_level_id, new_level_id)
+-- AUDIT_LOGS
+CREATE TABLE audit_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  actor_user_id UUID,
+  actor_role TEXT NOT NULL,
+  action TEXT NOT NULL,
+  entity_type TEXT,
+  entity_id UUID,
+  old_value JSONB,
+  new_value JSONB,
+  ip_address TEXT,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create table if not exists public.exam_sessions (
-  id uuid primary key default gen_random_uuid(),
-  student_id uuid not null references public.students(id) on delete cascade,
-  exam_id text not null,
-  status text not null default 'active' check (status in ('active', 'completed', 'expired', 'cancelled')),
-  started_at timestamptz not null default now(),
-  expires_at timestamptz not null,
-  submitted_at timestamptz,
-  entry_photo_url text,
-  last_question integer not null default 0 check (last_question >= 0),
-  created_at timestamptz not null default now(),
-  unique(student_id, exam_id, status)
+-- ============================================================
+-- 2. UPDATED_AT TRIGGERS
+-- ============================================================
+CREATE OR REPLACE FUNCTION update_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_programs_updated_at BEFORE UPDATE ON programs FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER trg_classes_updated_at BEFORE UPDATE ON classes FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER trg_batches_updated_at BEFORE UPDATE ON batches FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER trg_subjects_updated_at BEFORE UPDATE ON subjects FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER trg_levels_updated_at BEFORE UPDATE ON levels FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER trg_students_updated_at BEFORE UPDATE ON students FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER trg_exams_updated_at BEFORE UPDATE ON exams FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER trg_questions_updated_at BEFORE UPDATE ON questions FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER trg_attempts_updated_at BEFORE UPDATE ON attempts FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER trg_attempt_answers_updated_at BEFORE UPDATE ON attempt_answers FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER trg_progress_updated_at BEFORE UPDATE ON progress FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- ============================================================
+-- 3. INDEXES
+-- ============================================================
+CREATE INDEX idx_classes_program_id ON classes(program_id);
+CREATE INDEX idx_batches_class_id ON batches(class_id);
+CREATE INDEX idx_students_class_id ON students(class_id);
+CREATE INDEX idx_students_batch_id ON students(batch_id);
+CREATE INDEX idx_students_program_id ON students(program_id);
+CREATE INDEX idx_exams_subject_id ON exams(subject_id);
+CREATE INDEX idx_exams_level_id ON exams(level_id);
+CREATE INDEX idx_questions_exam_id ON questions(exam_id);
+CREATE INDEX idx_attempts_student_id ON attempts(student_id);
+CREATE INDEX idx_attempts_exam_id ON attempts(exam_id);
+CREATE INDEX idx_attempt_answers_attempt_id ON attempt_answers(attempt_id);
+CREATE INDEX idx_progress_student_id ON progress(student_id);
+CREATE INDEX idx_audit_logs_actor ON audit_logs(actor_user_id);
+CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at);
+
+-- ============================================================
+-- 4. ROW LEVEL SECURITY (RLS)
+-- ============================================================
+ALTER TABLE programs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE classes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE batches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE subjects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE levels ENABLE ROW LEVEL SECURITY;
+ALTER TABLE class_subjects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE students ENABLE ROW LEVEL SECURITY;
+ALTER TABLE exams ENABLE ROW LEVEL SECURITY;
+ALTER TABLE exam_classes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE questions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE attempts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE attempt_answers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE progress ENABLE ROW LEVEL SECURITY;
+ALTER TABLE site_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+
+-- Service role bypass
+CREATE POLICY "service_role_all_programs" ON programs FOR ALL TO service_role USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "service_role_all_classes" ON classes FOR ALL TO service_role USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "service_role_all_batches" ON batches FOR ALL TO service_role USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "service_role_all_subjects" ON subjects FOR ALL TO service_role USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "service_role_all_levels" ON levels FOR ALL TO service_role USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "service_role_all_class_subjects" ON class_subjects FOR ALL TO service_role USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "service_role_all_students" ON students FOR ALL TO service_role USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "service_role_all_exams" ON exams FOR ALL TO service_role USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "service_role_all_exam_classes" ON exam_classes FOR ALL TO service_role USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "service_role_all_questions" ON questions FOR ALL TO service_role USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "service_role_all_attempts" ON attempts FOR ALL TO service_role USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "service_role_all_attempt_answers" ON attempt_answers FOR ALL TO service_role USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "service_role_all_progress" ON progress FOR ALL TO service_role USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "service_role_all_site_settings" ON site_settings FOR ALL TO service_role USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "service_role_all_audit_logs" ON audit_logs FOR ALL TO service_role USING (TRUE) WITH CHECK (TRUE);
+
+-- Public read for reference data
+CREATE POLICY "public_read_programs" ON programs FOR SELECT TO anon USING (deleted_at IS NULL AND is_active = TRUE);
+CREATE POLICY "public_read_classes" ON classes FOR SELECT TO anon USING (deleted_at IS NULL AND is_active = TRUE);
+CREATE POLICY "public_read_batches" ON batches FOR SELECT TO anon USING (deleted_at IS NULL AND is_active = TRUE);
+CREATE POLICY "public_read_subjects" ON subjects FOR SELECT TO anon USING (deleted_at IS NULL AND is_active = TRUE);
+CREATE POLICY "public_read_levels" ON levels FOR SELECT TO anon USING (deleted_at IS NULL AND is_active = TRUE);
+CREATE POLICY "public_read_students_by_class" ON students FOR SELECT TO anon USING (is_active = TRUE AND deleted_at IS NULL);
+CREATE POLICY "public_read_site_settings" ON site_settings FOR SELECT TO anon USING (TRUE);
+
+-- Admin CRUD policies (anon — for admin console)
+CREATE POLICY "admin_all_programs" ON programs FOR ALL TO anon USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "admin_all_classes" ON classes FOR ALL TO anon USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "admin_all_batches" ON batches FOR ALL TO anon USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "admin_all_subjects" ON subjects FOR ALL TO anon USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "admin_all_levels" ON levels FOR ALL TO anon USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "admin_all_class_subjects" ON class_subjects FOR ALL TO anon USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "admin_all_students" ON students FOR ALL TO anon USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "admin_all_exams" ON exams FOR ALL TO anon USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "admin_all_exam_classes" ON exam_classes FOR ALL TO anon USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "admin_all_questions" ON questions FOR ALL TO anon USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "admin_all_attempts" ON attempts FOR ALL TO anon USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "admin_all_attempt_answers" ON attempt_answers FOR ALL TO anon USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "admin_all_progress" ON progress FOR ALL TO anon USING (TRUE) WITH CHECK (TRUE);
+CREATE POLICY "admin_all_audit_logs" ON audit_logs FOR ALL TO anon USING (TRUE) WITH CHECK (TRUE);
+
+-- ============================================================
+-- 5. SEED: DEFAULT SETTINGS & DEMO DATA
+-- ============================================================
+INSERT INTO site_settings (key, value) VALUES
+  ('site_name', 'TOP ENGLISH CLASS'),
+  ('site_theme', 'dark'),
+  ('login_background_url', NULL),
+  ('passing_threshold', '60');
+
+-- Demo Program
+INSERT INTO programs (id, name, is_active)
+VALUES ('11111111-1111-1111-1111-111111111111', 'General English Program', TRUE);
+
+-- Permanent Default Programs, Classes & Subjects:
+-- 1. CEC with Camp Class & Vocabularies Subject
+INSERT INTO programs (id, name, is_active)
+VALUES ('24d52c09-f2e6-4bbe-b8ab-3eaa41c8b333', 'CEC', TRUE)
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, deleted_at = NULL;
+
+INSERT INTO classes (id, program_id, name, is_active)
+VALUES ('d4c6d85a-44b7-4121-acae-28f7b9e70dcd', '24d52c09-f2e6-4bbe-b8ab-3eaa41c8b333', 'Camp', TRUE)
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, deleted_at = NULL;
+
+INSERT INTO subjects (id, program_id, name, is_active)
+VALUES ('99316504-99dd-444c-88bd-6ce073f878d3', '24d52c09-f2e6-4bbe-b8ab-3eaa41c8b333', 'Vocabularies', TRUE)
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, deleted_at = NULL;
+
+-- 2. Sheraton with Morning & Afternoon Classes & Vocabularies Subject
+INSERT INTO programs (id, name, is_active)
+VALUES ('e92fb031-a19f-42e7-a855-2d3132d24d57', 'Sheraton', TRUE)
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, deleted_at = NULL;
+
+INSERT INTO classes (id, program_id, name, is_active)
+VALUES ('7654cefa-a788-47f5-8daf-1e94ed2650dc', 'e92fb031-a19f-42e7-a855-2d3132d24d57', 'Morning', TRUE)
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, deleted_at = NULL;
+
+INSERT INTO classes (id, program_id, name, is_active)
+VALUES ('55082441-ed93-4cc9-8fd9-2904c8b4b4d9', 'e92fb031-a19f-42e7-a855-2d3132d24d57', 'Afternoon', TRUE)
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, deleted_at = NULL;
+
+INSERT INTO subjects (id, program_id, name, is_active)
+VALUES ('0105eed1-1b27-490a-bf56-4024ae67f579', 'e92fb031-a19f-42e7-a855-2d3132d24d57', 'Vocabularies', TRUE)
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, deleted_at = NULL;
+
+-- 3. Tamata with Hospitality Class & Vocabularies Subject
+INSERT INTO programs (id, name, is_active)
+VALUES ('f526eb6f-d9cc-42d4-809a-239e3458b711', 'Tamata', TRUE)
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, deleted_at = NULL;
+
+INSERT INTO classes (id, program_id, name, is_active)
+VALUES ('7b331178-ddea-4df4-a2c7-cc7edcf63417', 'f526eb6f-d9cc-42d4-809a-239e3458b711', 'Hospitality', TRUE)
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, deleted_at = NULL;
+
+INSERT INTO subjects (id, program_id, name, is_active)
+VALUES ('b985ce63-308f-4577-80fa-863dcdcddfc0', 'f526eb6f-d9cc-42d4-809a-239e3458b711', 'Vocabularies', TRUE)
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, deleted_at = NULL;
+
+-- Demo Class
+INSERT INTO classes (id, program_id, name, is_active)
+VALUES ('22222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 'Class A', TRUE);
+
+-- Demo Batch
+INSERT INTO batches (id, class_id, name, is_active)
+VALUES ('77777777-7777-7777-7777-777777777777', '22222222-2222-2222-2222-222222222222', 'Batch 1', TRUE);
+
+-- Demo Subject
+INSERT INTO subjects (id, program_id, name, is_active)
+VALUES ('33333333-3333-3333-3333-333333333333', '11111111-1111-1111-1111-111111111111', 'English Grammar & Vocabulary', TRUE);
+
+-- Assign Subject to Class
+INSERT INTO class_subjects (class_id, subject_id)
+VALUES ('22222222-2222-2222-2222-222222222222', '33333333-3333-3333-3333-333333333333');
+
+-- Demo Level
+INSERT INTO levels (id, subject_id, name, level_number, is_active)
+VALUES ('44444444-4444-4444-4444-444444444444', '33333333-3333-3333-3333-333333333333', 'Level 1 - Beginner', 1, TRUE);
+
+-- Demo Student (PIN: 1234 -> SHA-256 hash: 03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4)
+INSERT INTO students (id, program_id, class_id, batch_id, name, gender, birth_date, pin_hash, is_active)
+VALUES (
+  '55555555-5555-5555-5555-555555555555',
+  '11111111-1111-1111-1111-111111111111',
+  '22222222-2222-2222-2222-222222222222',
+  '77777777-7777-7777-7777-777777777777',
+  'John Doe',
+  'male',
+  '2012-05-15',
+  '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4',
+  TRUE
 );
 
-create table if not exists public.exam_session_answers (
-  session_id uuid not null references public.exam_sessions(id) on delete cascade,
-  question_key text not null,
-  answer text not null default '',
-  updated_at timestamptz not null default now(),
-  primary key(session_id, question_key)
-);
 
-create table if not exists public.audit_logs (
-  id uuid primary key default gen_random_uuid(),
-  actor_user_id uuid references auth.users(id) on delete set null,
-  action text not null check (length(trim(action)) > 0),
-  details jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now()
-);
-
-create index if not exists audit_logs_created_at_idx on public.audit_logs (created_at desc);
-alter table public.audit_logs enable row level security;
-drop policy if exists "Tutors manage audit logs" on public.audit_logs;
-create policy "Tutors manage audit logs" on public.audit_logs for all to authenticated
-  using ((auth.jwt()->'app_metadata'->>'role') = 'tutor')
-  with check ((auth.jwt()->'app_metadata'->>'role') = 'tutor');
-
-alter table public.exam_sessions enable row level security;
-alter table public.exam_session_answers enable row level security;
-drop policy if exists "Students manage own exam sessions" on public.exam_sessions;
-create policy "Students manage own exam sessions" on public.exam_sessions
-  for all to authenticated using (exists (
-    select 1 from public.student_accounts account
-    where account.student_id = exam_sessions.student_id and account.user_id = auth.uid()
-  )) with check (exists (
-    select 1 from public.student_accounts account
-    where account.student_id = exam_sessions.student_id and account.user_id = auth.uid()
-  ));
-drop policy if exists "Students manage own exam answers" on public.exam_session_answers;
-create policy "Students manage own exam answers" on public.exam_session_answers
-  for all to authenticated using (exists (
-    select 1 from public.exam_sessions session
-    join public.student_accounts account on account.student_id = session.student_id
-    where session.id = exam_session_answers.session_id and account.user_id = auth.uid()
-  )) with check (exists (
-    select 1 from public.exam_sessions session
-    join public.student_accounts account on account.student_id = session.student_id
-    where session.id = exam_session_answers.session_id and account.user_id = auth.uid()
-  ));
-
-alter table public.progression_history enable row level security;
-drop policy if exists "Students read own progression history" on public.progression_history;
-create policy "Students read own progression history" on public.progression_history
-  for select to authenticated using (exists (
-    select 1 from public.student_accounts account
-    where account.student_id = progression_history.student_id and account.user_id = auth.uid()
-  ));
-drop policy if exists "Tutors manage progression history" on public.progression_history;
-create policy "Tutors manage progression history" on public.progression_history
-  for all to authenticated
-  using ((auth.jwt()->'app_metadata'->>'role') = 'tutor')
-  with check ((auth.jwt()->'app_metadata'->>'role') = 'tutor');
-
-create or replace function public.advance_student_progression(
-  p_student_id uuid,
-  p_trigger_event text default 'progress_recalculation'
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  student_row public.students%rowtype;
-  current_level public.levels%rowtype;
-  next_level public.levels%rowtype;
-  total_requirements integer := 0;
-  completed_requirements integer := 0;
-  total_targets integer := 0;
-  completed_targets integer := 0;
-  mandatory_remaining integer := 0;
-  percentage numeric(5,2) := 0;
-  eligible boolean := false;
-  status text := 'in_progress';
-  history_id uuid;
-begin
-  if auth.uid() is not null and not exists (
-    select 1 from public.student_accounts
-    where student_id = p_student_id and user_id = auth.uid()
-  ) and (auth.jwt()->'app_metadata'->>'role') <> 'tutor' then
-    raise exception 'Student progression ownership validation failed';
-  end if;
-  select * into student_row from public.students where id = p_student_id for update;
-  if not found then raise exception 'Student not found'; end if;
-
-  select * into current_level from public.levels
-    where id = student_row.level_id and status = 'active' for update;
-
-  if current_level.id is null then
-    return jsonb_build_object('status', 'in_progress', 'reason', 'Current level is not configured');
-  end if;
-
-  select count(*), count(*) filter (where coalesce(progress.completed, false)),
-         count(*) filter (where requirements.mandatory and not coalesce(progress.completed, false))
-    into total_requirements, completed_requirements, mandatory_remaining
-    from public.requirements
-    left join public.student_requirement_progress progress
-      on progress.requirement_id = requirements.id and progress.student_id = p_student_id
-    where requirements.level_id = current_level.id and requirements.status = 'active';
-
-  select count(*), count(*) filter (where coalesce(progress.completed, false))
-    into total_targets, completed_targets
-    from public.achievement_targets
-    left join public.student_target_progress progress
-      on progress.target_id = achievement_targets.id and progress.student_id = p_student_id
-    where achievement_targets.level_id = current_level.id and achievement_targets.status = 'active';
-
-  percentage := case when total_requirements = 0 then 100
-    else round(completed_requirements::numeric / total_requirements * 100, 2) end;
-  eligible := percentage >= current_level.advancement_threshold and mandatory_remaining = 0
-    and (total_targets = 0 or completed_targets = total_targets);
-
-  select * into next_level from public.levels
-    where class_id = current_level.class_id and status = 'active'
-      and level_order > current_level.level_order
-    order by level_order
-    limit 1;
-
-  if not eligible then status := case when percentage > 0 then 'not_eligible' else 'in_progress' end;
-  elsif next_level.id is null then status := 'no_next_level';
-  else
-    update public.students set level_id = next_level.id, current_level = next_level.name, updated_at = now()
-      where id = p_student_id and level_id = current_level.id;
-    if found then
-      insert into public.progression_history (
-        student_id, previous_level_id, new_level_id, program, class_name, reason,
-        trigger_event, evidence, progress_percent, requirement_status, actor_user_id
-      ) values (
-        p_student_id, current_level.id, next_level.id, student_row.program, student_row.class_name,
-        'All configured advancement conditions satisfied', p_trigger_event,
-        jsonb_build_object('completed_targets', completed_targets, 'total_targets', total_targets),
-        percentage,
-        jsonb_build_object('completed', completed_requirements, 'total', total_requirements,
-          'mandatory_remaining', mandatory_remaining),
-        auth.uid()
-      ) on conflict (student_id, previous_level_id, new_level_id) do nothing
-      returning id into history_id;
-      status := 'advanced';
-    end if;
-  end if;
-
-  insert into public.student_progress (
-    student_id, progress_percent, completed_requirements, total_requirements,
-    completed_targets, total_targets, next_level, next_level_eligible, updated_at
-  ) values (
-    p_student_id, percentage, completed_requirements, total_requirements,
-    completed_targets, total_targets, case when status = 'advanced' then null else next_level.name end,
-    eligible and next_level.id is not null, now()
-  ) on conflict (student_id) do update set
-    progress_percent = excluded.progress_percent,
-    completed_requirements = excluded.completed_requirements,
-    total_requirements = excluded.total_requirements,
-    completed_targets = excluded.completed_targets,
-    total_targets = excluded.total_targets,
-    next_level = excluded.next_level,
-    next_level_eligible = excluded.next_level_eligible,
-    updated_at = now();
-
-  return jsonb_build_object(
-    'status', status, 'progress_percent', percentage,
-    'completed_requirements', completed_requirements, 'total_requirements', total_requirements,
-    'completed_targets', completed_targets, 'total_targets', total_targets,
-    'next_level', case when status = 'advanced' then null else next_level.name end,
-    'history_id', history_id
-  );
-end;
-$$;
-
-revoke all on function public.advance_student_progression(uuid, text) from public, anon;
-grant execute on function public.advance_student_progression(uuid, text) to authenticated;
-
-alter table public.students
-  add column if not exists program_id uuid references public.programs(id) on delete restrict,
-  add column if not exists class_id uuid references public.classes(id) on delete restrict,
-  add column if not exists level_id uuid references public.levels(id) on delete restrict;
-
-create index if not exists students_program_class_level_idx
-  on public.students(program_id, class_id, level_id);
-
-create or replace function public.validate_student_hierarchy()
-returns trigger
-language plpgsql
-as $$
-declare
-  class_program_id uuid;
-  level_class_id uuid;
-begin
-  if new.class_id is not null then
-    select program_id, status into class_program_id
-    from public.classes where id = new.class_id;
-    if class_program_id is null or (new.program_id is not null and class_program_id <> new.program_id) then
-      raise exception 'Student class does not belong to the selected program';
-    end if;
-  end if;
-  if new.level_id is not null then
-    select class_id into level_class_id from public.levels where id = new.level_id;
-    if level_class_id is null or (new.class_id is not null and level_class_id <> new.class_id) then
-      raise exception 'Student level does not belong to the selected class';
-    end if;
-  end if;
-  return new;
-end;
-$$;
-
-drop trigger if exists validate_student_hierarchy on public.students;
-create trigger validate_student_hierarchy
-before insert or update of program_id, class_id, level_id on public.students
-for each row execute function public.validate_student_hierarchy();
-
-create table if not exists public.student_import_logs (
-  id uuid primary key default gen_random_uuid(),
-  performed_by uuid references auth.users(id),
-  source_filename text not null,
-  processed_count integer not null default 0,
-  inserted_count integer not null default 0,
-  updated_count integer not null default 0,
-  rejected_count integer not null default 0,
-  duplicate_warning_count integer not null default 0,
-  status text not null check (status in ('preview', 'committed', 'rolled_back', 'failed')),
-  errors jsonb not null default '[]'::jsonb,
-  created_at timestamptz not null default now()
-);
-
-alter table public.students enable row level security;
-alter table public.student_accounts enable row level security;
-alter table public.scholarships enable row level security;
-alter table public.student_progress enable row level security;
-alter table public.student_import_logs enable row level security;
-alter table public.programs enable row level security;
-alter table public.classes enable row level security;
-alter table public.levels enable row level security;
-alter table public.requirements enable row level security;
-alter table public.achievement_targets enable row level security;
-alter table public.requirement_targets enable row level security;
-alter table public.student_requirement_progress enable row level security;
-alter table public.student_target_progress enable row level security;
-
-drop policy if exists "Authenticated users read active master data" on public.programs;
-create policy "Authenticated users read active master data" on public.programs
-  for select to authenticated using (status = 'active');
-drop policy if exists "Authenticated users read active classes" on public.classes;
-create policy "Authenticated users read active classes" on public.classes
-  for select to authenticated using (status = 'active');
-drop policy if exists "Authenticated users read active levels" on public.levels;
-create policy "Authenticated users read active levels" on public.levels
-  for select to authenticated using (status = 'active');
-drop policy if exists "Authenticated users read active requirements" on public.requirements;
-create policy "Authenticated users read active requirements" on public.requirements
-  for select to authenticated using (status = 'active');
-drop policy if exists "Authenticated users read active targets" on public.achievement_targets;
-create policy "Authenticated users read active targets" on public.achievement_targets
-  for select to authenticated using (status = 'active');
-drop policy if exists "Authenticated users read target relationships" on public.requirement_targets;
-create policy "Authenticated users read target relationships" on public.requirement_targets
-  for select to authenticated using (true);
-drop policy if exists "Students read own requirement progress" on public.student_requirement_progress;
-create policy "Students read own requirement progress" on public.student_requirement_progress
-  for select to authenticated using (exists (
-    select 1 from public.student_accounts account
-    where account.student_id = student_requirement_progress.student_id and account.user_id = auth.uid()
-  ));
-drop policy if exists "Students read own target progress" on public.student_target_progress;
-create policy "Students read own target progress" on public.student_target_progress
-  for select to authenticated using (exists (
-    select 1 from public.student_accounts account
-    where account.student_id = student_target_progress.student_id and account.user_id = auth.uid()
-  ));
-
-drop policy if exists "Tutors manage master data" on public.programs;
-create policy "Tutors manage master data" on public.programs for all to authenticated
-  using ((auth.jwt()->'app_metadata'->>'role') = 'tutor')
-  with check ((auth.jwt()->'app_metadata'->>'role') = 'tutor');
-drop policy if exists "Tutors manage classes" on public.classes;
-create policy "Tutors manage classes" on public.classes for all to authenticated
-  using ((auth.jwt()->'app_metadata'->>'role') = 'tutor')
-  with check ((auth.jwt()->'app_metadata'->>'role') = 'tutor');
-drop policy if exists "Tutors manage levels" on public.levels;
-create policy "Tutors manage levels" on public.levels for all to authenticated
-  using ((auth.jwt()->'app_metadata'->>'role') = 'tutor')
-  with check ((auth.jwt()->'app_metadata'->>'role') = 'tutor');
-drop policy if exists "Tutors manage requirements" on public.requirements;
-create policy "Tutors manage requirements" on public.requirements for all to authenticated
-  using ((auth.jwt()->'app_metadata'->>'role') = 'tutor')
-  with check ((auth.jwt()->'app_metadata'->>'role') = 'tutor');
-drop policy if exists "Tutors manage targets" on public.achievement_targets;
-create policy "Tutors manage targets" on public.achievement_targets for all to authenticated
-  using ((auth.jwt()->'app_metadata'->>'role') = 'tutor')
-  with check ((auth.jwt()->'app_metadata'->>'role') = 'tutor');
-drop policy if exists "Tutors manage requirement targets" on public.requirement_targets;
-create policy "Tutors manage requirement targets" on public.requirement_targets for all to authenticated
-  using ((auth.jwt()->'app_metadata'->>'role') = 'tutor')
-  with check ((auth.jwt()->'app_metadata'->>'role') = 'tutor');
-drop policy if exists "Tutors manage requirement progress" on public.student_requirement_progress;
-create policy "Tutors manage requirement progress" on public.student_requirement_progress for all to authenticated
-  using ((auth.jwt()->'app_metadata'->>'role') = 'tutor')
-  with check ((auth.jwt()->'app_metadata'->>'role') = 'tutor');
-drop policy if exists "Tutors manage target progress" on public.student_target_progress;
-create policy "Tutors manage target progress" on public.student_target_progress for all to authenticated
-  using ((auth.jwt()->'app_metadata'->>'role') = 'tutor')
-  with check ((auth.jwt()->'app_metadata'->>'role') = 'tutor');
-
-drop policy if exists "Students read own record" on public.students;
-create policy "Students read own record" on public.students
-  for select to authenticated
-  using (exists (
-    select 1 from public.student_accounts account
-    where account.student_id = students.id and account.user_id = auth.uid()
-  ));
-
-drop policy if exists "Tutors manage students" on public.students;
-create policy "Tutors manage students" on public.students
-  for all to authenticated
-  using ((auth.jwt()->'app_metadata'->>'role') = 'tutor')
-  with check ((auth.jwt()->'app_metadata'->>'role') = 'tutor');
-
-drop policy if exists "Student accounts read own record" on public.student_accounts;
-create policy "Student accounts read own record" on public.student_accounts
-  for select to authenticated
-  using (user_id = auth.uid());
-
-drop policy if exists "Tutors manage student accounts" on public.student_accounts;
-create policy "Tutors manage student accounts" on public.student_accounts
-  for all to authenticated
-  using ((auth.jwt()->'app_metadata'->>'role') = 'tutor')
-  with check ((auth.jwt()->'app_metadata'->>'role') = 'tutor');
-
-drop policy if exists "Students read own scholarships" on public.scholarships;
-create policy "Students read own scholarships" on public.scholarships
-  for select to authenticated
-  using (exists (
-    select 1
-    from public.student_accounts account
-    where account.student_id = scholarships.student_id and account.user_id = auth.uid()
-  ));
-
-drop policy if exists "Students read own progress" on public.student_progress;
-create policy "Students read own progress" on public.student_progress
-  for select to authenticated
-  using (exists (
-    select 1 from public.student_accounts account
-    where account.student_id = student_progress.student_id and account.user_id = auth.uid()
-  ));
-
-drop policy if exists "Tutors manage scholarships" on public.scholarships;
-create policy "Tutors manage scholarships" on public.scholarships
-  for all to authenticated
-  using ((auth.jwt()->'app_metadata'->>'role') = 'tutor')
-  with check ((auth.jwt()->'app_metadata'->>'role') = 'tutor');
-
-revoke all on public.students, public.student_accounts, public.scholarships, public.student_import_logs from anon;
-grant select on public.students, public.student_accounts, public.scholarships to authenticated;
-grant select on public.student_progress to authenticated;
-
-create or replace function public.touch_student_updated_at()
-returns trigger
-language plpgsql
-security invoker
-as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$;
-
-drop trigger if exists students_touch_updated_at on public.students;
-create trigger students_touch_updated_at
-before update on public.students
-for each row execute function public.touch_student_updated_at();
-
-drop trigger if exists scholarships_touch_updated_at on public.scholarships;
-create trigger scholarships_touch_updated_at
-before update on public.scholarships
-for each row execute function public.touch_student_updated_at();
-
--- The RPC validates and merges one import atomically. It deliberately does
--- not create program, class, or level master records.
-create or replace function public.merge_student_import(
-  import_filename text,
-  records jsonb
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  record_item jsonb;
-  existing_student public.students%rowtype;
-  imported_id text;
-  imported_name text;
-  imported_dob date;
-  inserted_count integer := 0;
-  updated_count integer := 0;
-  rejected_count integer := 0;
-  duplicate_warning_count integer := 0;
-  errors jsonb := '[]'::jsonb;
-begin
-  if coalesce(auth.jwt()->'app_metadata'->>'role', '') <> 'tutor' then
-    raise exception 'Tutor authorization is required';
-  end if;
-  if jsonb_typeof(records) <> 'array' then
-    raise exception 'Import records must be an array';
-  end if;
-
-  for record_item in select value from jsonb_array_elements(records)
-  loop
-    imported_id := nullif(trim(record_item->>'student_id'), '');
-    imported_name := nullif(trim(record_item->>'full_name'), '');
-    imported_dob := nullif(record_item->>'date_of_birth', '')::date;
-
-    if imported_id is null or imported_name is null then
-      rejected_count := rejected_count + 1;
-      errors := errors || jsonb_build_array(jsonb_build_object(
-        'student_id', imported_id, 'full_name', imported_name,
-        'error', 'Student ID and full name are required'
-      ));
-      continue;
-    end if;
-
-    select * into existing_student from public.students
-      where student_id = imported_id
-      or (lower(full_name) = lower(imported_name)
-          and date_of_birth is not distinct from imported_dob)
-      limit 1
-      for update;
-
-    if found then
-      if existing_student.student_id <> imported_id then
-        duplicate_warning_count := duplicate_warning_count + 1;
-        errors := errors || jsonb_build_array(jsonb_build_object(
-          'student_id', imported_id, 'full_name', imported_name,
-          'error', 'Possible duplicate matched by name and date of birth'
-        ));
-        continue;
-      end if;
-      update public.students set
-        full_name = imported_name,
-        date_of_birth = imported_dob,
-        gender = nullif(lower(record_item->>'gender'), ''),
-        photo_url = nullif(record_item->>'photo_url', ''),
-        program = nullif(trim(record_item->>'program'), ''),
-        class_name = nullif(trim(record_item->>'class_name'), ''),
-        current_level = nullif(trim(record_item->>'current_level'), ''),
-        status = coalesce(nullif(record_item->>'status', ''), 'active')
-        where id = existing_student.id;
-      updated_count := updated_count + 1;
-    else
-      insert into public.students (
-        student_id, full_name, date_of_birth, gender, photo_url,
-        program, class_name, current_level, status
-      ) values (
-        imported_id, imported_name, imported_dob,
-        nullif(lower(record_item->>'gender'), ''),
-        nullif(record_item->>'photo_url', ''),
-        nullif(trim(record_item->>'program'), ''),
-        nullif(trim(record_item->>'class_name'), ''),
-        nullif(trim(record_item->>'current_level'), ''),
-        coalesce(nullif(record_item->>'status', ''), 'active')
-      );
-      inserted_count := inserted_count + 1;
-    end if;
-  end loop;
-
-  insert into public.student_import_logs (
-    performed_by, source_filename, processed_count, inserted_count,
-    updated_count, rejected_count, duplicate_warning_count, status, errors
-  ) values (
-    auth.uid(), import_filename, jsonb_array_length(records), inserted_count,
-    updated_count, rejected_count, duplicate_warning_count, 'committed', errors
-  );
-
-  return jsonb_build_object(
-    'processed', jsonb_array_length(records),
-    'inserted', inserted_count,
-    'updated', updated_count,
-    'rejected', rejected_count,
-    'duplicate_warnings', duplicate_warning_count,
-    'errors', errors
-  );
-exception when others then
-  raise;
-end;
-$$;
-
-revoke all on function public.merge_student_import(text, jsonb) from public, anon;
-grant execute on function public.merge_student_import(text, jsonb) to authenticated;
